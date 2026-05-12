@@ -1,51 +1,77 @@
-import streamlit as st
 import yfinance as yf
 import pandas as pd
+import warnings
+import time
 
-# Configuración de la página (Modo móvil)
-st.set_page_config(page_title="IA Trading Scanner", layout="centered")
+warnings.filterwarnings("ignore")
 
-st.title("🚀 Scanner Triángulo de Hierro")
-st.subheader("Buscando Disparos en Balanz")
+# Lista de CEDEARs más importantes
+tickers = [
+    "AAPL", "ADBE", "AMD", "AMZN", "BA", "BABA", "BBD", "BIDU", "C", "CAT",
+    "COIN", "CRM", "CVX", "DIS", "GE", "GOOGL", "GOLD", "HD", "IBM", "INTC",
+    "JNJ", "JPM", "KO", "MA", "MCD", "MELI", "META", "MSFT", "NFLX", "NVDA",
+    "PFE", "PYPL", "QCOM", "SHOP", "SPOT", "T", "TSLA", "V", "VALE",
+    "VZ", "WMT", "XOM", "AAL", "ABEV", "ABT", "ACN", "ARKK", "AMGN", "EBAY"
+]
 
-# Lista de CEDEARs con volumen
-tickers = ["AAPL", "ADBE", "AMZN", "AMD", "BA", "BABA", "DIS", "GOOGL", "KO", "MELI", "MSFT", "NVDA", "TSLA", "V", "WMT"]
+def scanner_pro_v4():
+    print("\n" + "="*75)
+    print("   IA SCANNER: ESTRATEGIA DE PIVOTE (VERSIÓN REPARADA)")
+    print("="*75)
+    encontrados = 0
 
-def analizar_mercado():
-    resultados = []
-    bar = st.progress(0)
-    for idx, t in enumerate(tickers):
+    for t in tickers:
         try:
-            data = yf.download(t, period="100d", interval="1d", progress=False)
-            if isinstance(data.columns, pd.MultiIndex): data.columns = data.columns.get_level_values(0)
+            # 1. Descarga y Limpieza Quirúrgica (Lo que acabamos de arreglar)
+            raw_data = yf.download(t, period="100d", interval="1d", progress=False)
+            if raw_data.empty: continue
             
-            # Indicadores
-            c = data['Close']
-            ema9 = c.ewm(span=9, adjust=False).mean()
-            ema50 = c.ewm(span=50, adjust=False).mean()
-            
-            h = data.iloc[-1]
-            
-            # Lógica simplificada de Pivote
-            toca_9 = h['Low'] <= ema9.iloc[-1] <= h['High']
-            toca_50 = h['Low'] <= ema50.iloc[-1] <= h['High']
-            
-            if h['Close'] > h['Open']: # Solo velas verdes
-                tipo = ""
-                if h['Close'] < ema50.iloc[-1] and toca_9: tipo = "📉 PIVOTE EMA 9"
-                elif h['Close'] > ema50.iloc[-1] and (toca_9 or toca_50): tipo = "🚀 APOYO TENDENCIA"
-                
-                if tipo != "":
-                    resultados.append({"Activo": t, "Estado": tipo, "Precio": round(float(h['Close']), 2)})
-            
-        except: continue
-        bar.progress((idx + 1) / len(tickers))
-    return pd.DataFrame(resultados)
+            data = raw_data.copy()
+            if isinstance(data.columns, pd.MultiIndex):
+                data.columns = data.columns.get_level_values(0)
 
-if st.button("ESCANEAR AHORA"):
-    df = analizar_mercado()
-    if not df.empty:
-        st.success("¡Oportunidades encontradas!")
-        st.dataframe(df, use_container_width=True) # Tabla ajustable al ancho del celu
-    else:
-        st.warning("Mercado en calma. No hay señales claras hoy.")
+            # 2. Indicadores (EMA 9, 50, MACD, RSI)
+            c = data['Close']
+            data['EMA9'] = c.ewm(span=9, adjust=False).mean()
+            data['EMA50'] = c.ewm(span=50, adjust=False).mean()
+            
+            exp1, exp2 = c.ewm(span=12, adjust=False).mean(), c.ewm(span=26, adjust=False).mean()
+            data['Hist'] = (exp1 - exp2) - (exp1 - exp2).ewm(span=9, adjust=False).mean()
+            
+            delta = c.diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            data['RSI'] = 100 - (100 / (1 + (gain / loss)))
+
+            h, a = data.iloc[-1], data.iloc[-2]
+
+            # 3. Aplicación de tus Reglas
+            vela_verde = float(h['Close']) > float(h['Open'])
+            rsi_ok = float(h['RSI']) < 55
+            no_cruce = (float(h['Hist']) > 0 and float(a['Hist']) > 0) or (float(h['Hist']) < 0 and float(a['Hist']) < 0)
+
+            # Zona de toque (Margen 1%)
+            def en_zona(val, ema): return abs(float(val) - float(ema)) / float(ema) <= 0.01
+            toca_9 = en_zona(h['Low'], h['EMA9']) or (float(h['Low']) <= float(h['EMA9']) <= float(h['High']))
+            toca_50 = en_zona(h['Low'], h['EMA50']) or (float(h['Low']) <= float(h['EMA50']) <= float(h['High']))
+
+            if vela_verde and rsi_ok and no_cruce:
+                if float(h['Close']) < float(h['EMA50']) and toca_9:
+                    print(f"📉 [BAJISTA] {t:<6} | Pivote EMA 9  | RSI: {float(h['RSI']):.1f}")
+                    encontrados += 1
+                elif float(h['Close']) > float(h['EMA50']) and (toca_9 or toca_50):
+                    tipo = "EMA 9" if toca_9 else "EMA 50"
+                    print(f"🚀 [ALCISTA] {t:<6} | Apoyo en {tipo:<6} | RSI: {float(h['RSI']):.1f}")
+                    encontrados += 1
+            
+            time.sleep(0.1)
+        except: continue
+
+    if encontrados == 0:
+        print("\nNo se detectan apoyos claros en este momento.")
+    
+    print("\n" + "="*75)
+    input("Presioná ENTER para cerrar...")
+
+if __name__ == "__main__":
+    scanner_pro_v4()
