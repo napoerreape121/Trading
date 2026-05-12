@@ -1,11 +1,8 @@
 import yfinance as yf
 import pandas as pd
-import warnings
-import time
+import ta
 
-warnings.filterwarnings("ignore")
-
-# Lista de CEDEARs más importantes
+# Lista de CEDEARs / acciones
 tickers = [
     "AAPL", "ADBE", "AMD", "AMZN", "BA", "BABA", "BBD", "BIDU", "C", "CAT",
     "COIN", "CRM", "CVX", "DIS", "GE", "GOOGL", "GOLD", "HD", "IBM", "INTC",
@@ -14,64 +11,41 @@ tickers = [
     "VZ", "WMT", "XOM", "AAL", "ABEV", "ABT", "ACN", "ARKK", "AMGN", "EBAY"
 ]
 
-def scanner_pro_v4():
-    print("\n" + "="*75)
-    print("   IA SCANNER: ESTRATEGIA DE PIVOTE (VERSIÓN REPARADA)")
-    print("="*75)
-    encontrados = 0
-
-    for t in tickers:
-        try:
-            # 1. Descarga y Limpieza Quirúrgica (Lo que acabamos de arreglar)
-            raw_data = yf.download(t, period="100d", interval="1d", progress=False)
-            if raw_data.empty: continue
-            
-            data = raw_data.copy()
-            if isinstance(data.columns, pd.MultiIndex):
-                data.columns = data.columns.get_level_values(0)
-
-            # 2. Indicadores (EMA 9, 50, MACD, RSI)
-            c = data['Close']
-            data['EMA9'] = c.ewm(span=9, adjust=False).mean()
-            data['EMA50'] = c.ewm(span=50, adjust=False).mean()
-            
-            exp1, exp2 = c.ewm(span=12, adjust=False).mean(), c.ewm(span=26, adjust=False).mean()
-            data['Hist'] = (exp1 - exp2) - (exp1 - exp2).ewm(span=9, adjust=False).mean()
-            
-            delta = c.diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-            data['RSI'] = 100 - (100 / (1 + (gain / loss)))
-
-            h, a = data.iloc[-1], data.iloc[-2]
-
-            # 3. Aplicación de tus Reglas
-            vela_verde = float(h['Close']) > float(h['Open'])
-            rsi_ok = float(h['RSI']) < 55
-            no_cruce = (float(h['Hist']) > 0 and float(a['Hist']) > 0) or (float(h['Hist']) < 0 and float(a['Hist']) < 0)
-
-            # Zona de toque (Margen 1%)
-            def en_zona(val, ema): return abs(float(val) - float(ema)) / float(ema) <= 0.01
-            toca_9 = en_zona(h['Low'], h['EMA9']) or (float(h['Low']) <= float(h['EMA9']) <= float(h['High']))
-            toca_50 = en_zona(h['Low'], h['EMA50']) or (float(h['Low']) <= float(h['EMA50']) <= float(h['High']))
-
-            if vela_verde and rsi_ok and no_cruce:
-                if float(h['Close']) < float(h['EMA50']) and toca_9:
-                    print(f"📉 [BAJISTA] {t:<6} | Pivote EMA 9  | RSI: {float(h['RSI']):.1f}")
-                    encontrados += 1
-                elif float(h['Close']) > float(h['EMA50']) and (toca_9 or toca_50):
-                    tipo = "EMA 9" if toca_9 else "EMA 50"
-                    print(f"🚀 [ALCISTA] {t:<6} | Apoyo en {tipo:<6} | RSI: {float(h['RSI']):.1f}")
-                    encontrados += 1
-            
-            time.sleep(0.1)
-        except: continue
-
-    if encontrados == 0:
-        print("\nNo se detectan apoyos claros en este momento.")
+def scanner(ticker):
+    # Descargar datos diarios de los últimos 6 meses
+    data = yf.download(ticker, period="6mo", interval="1d")
     
-    print("\n" + "="*75)
-    input("Presioná ENTER para cerrar...")
+    # Calcular indicadores
+    data["EMA9"] = ta.trend.EMAIndicator(data["Close"], window=9).ema_indicator()
+    data["EMA50"] = ta.trend.EMAIndicator(data["Close"], window=50).ema_indicator()
+    macd = ta.trend.MACD(data["Close"])
+    data["MACD_hist"] = macd.macd_diff()
+    data["RSI"] = ta.momentum.RSIIndicator(data["Close"], window=14).rsi()
+    
+    # Última vela
+    last = data.iloc[-1]
+    prev = data.iloc[-2]
+    
+    # Condiciones
+    tendencia_bajista = last["EMA9"] < last["EMA50"]
+    tendencia_alcista = last["EMA9"] > last["EMA50"]
+    vela_verde = last["Close"] > last["Open"]
+    toca_ema9 = abs(last["Close"] - last["EMA9"]) / last["EMA9"] < 0.005
+    toca_ema50 = abs(last["Close"] - last["EMA50"]) / last["EMA50"] < 0.005
+    macd_no_cruce = last["MACD_hist"] * prev["MACD_hist"] > 0
+    rsi_bajo = last["RSI"] < 50
+    
+    # Estrategia
+    if tendencia_bajista and vela_verde and toca_ema9 and macd_no_cruce and rsi_bajo:
+        return f"{ticker}: Señal en tendencia bajista tocando EMA9"
+    elif tendencia_alcista and vela_verde and (toca_ema9 or toca_ema50) and macd_no_cruce and rsi_bajo:
+        return f"{ticker}: Señal en tendencia alcista tocando EMA9/EMA50"
+    else:
+        return None
 
+# Ejecutar scanner
 if __name__ == "__main__":
-    scanner_pro_v4()
+    for t in tickers:
+        señal = scanner(t)
+        if señal:
+            print(señal)
