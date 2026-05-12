@@ -20,9 +20,6 @@ def scanner(ticker):
     try:
         data["EMA9"] = ta.trend.EMAIndicator(data["Close"], window=9).ema_indicator()
         data["EMA50"] = ta.trend.EMAIndicator(data["Close"], window=50).ema_indicator()
-        macd = ta.trend.MACD(data["Close"])
-        data["MACD_hist"] = macd.macd_diff()
-        data["RSI"] = ta.momentum.RSIIndicator(data["Close"], window=14).rsi()
     except Exception:
         return None
     
@@ -32,17 +29,15 @@ def scanner(ticker):
     vela_verde = last["Close"] > last["Open"]
     toca_ema9 = abs(last["Close"] - last["EMA9"]) / last["EMA9"] < 0.005
     toca_ema50 = abs(last["Close"] - last["EMA50"]) / last["EMA50"] < 0.005
-    macd_no_cruce = last["MACD_hist"] * prev["MACD_hist"] > 0
-    rsi_bajo = last["RSI"] < 50
 
-    if tendencia_bajista and vela_verde and toca_ema9 and macd_no_cruce and rsi_bajo:
+    if tendencia_bajista and vela_verde and toca_ema9:
         return f"{ticker}: Señal en tendencia bajista tocando EMA9"
-    elif tendencia_alcista and vela_verde and (toca_ema9 or toca_ema50) and macd_no_cruce and rsi_bajo:
+    elif tendencia_alcista and vela_verde and (toca_ema9 or toca_ema50):
         return f"{ticker}: Señal en tendencia alcista tocando EMA9/EMA50"
     return None
 
 # Interfaz Streamlit
-st.title("Scanner de CEDEARs con EMA/RSI/MACD")
+st.title("Scanner de CEDEARs con EMA")
 
 resultados = []
 for t in tickers:
@@ -56,4 +51,3 @@ if resultados:
         st.write(r)
 else:
     st.write("No se detectaron señales en este momento.")
-
