@@ -12,20 +12,31 @@ tickers = [
 ]
 
 def scanner(ticker):
-    # Descargar datos diarios de los últimos 6 meses
+    # Descargar datos diarios
     data = yf.download(ticker, period="6mo", interval="1d")
+    data = data.dropna()
+
+    # Validación: si no hay datos o falta columna Close
+    if data.empty or "Close" not in data.columns:
+        return None
     
-    # Calcular indicadores
-    data["EMA9"] = ta.trend.EMAIndicator(data["Close"], window=9).ema_indicator()
-    data["EMA50"] = ta.trend.EMAIndicator(data["Close"], window=50).ema_indicator()
-    macd = ta.trend.MACD(data["Close"])
-    data["MACD_hist"] = macd.macd_diff()
-    data["RSI"] = ta.momentum.RSIIndicator(data["Close"], window=14).rsi()
-    
+    try:
+        # Calcular indicadores
+        data["EMA9"] = ta.trend.EMAIndicator(data["Close"], window=9).ema_indicator()
+        data["EMA50"] = ta.trend.EMAIndicator(data["Close"], window=50).ema_indicator()
+        macd = ta.trend.MACD(data["Close"])
+        data["MACD_hist"] = macd.macd_diff()
+        data["RSI"] = ta.momentum.RSIIndicator(data["Close"], window=14).rsi()
+    except Exception as e:
+        print(f"Error calculando indicadores para {ticker}: {e}")
+        return None
+
     # Última vela
+    if len(data) < 2:
+        return None
     last = data.iloc[-1]
     prev = data.iloc[-2]
-    
+
     # Condiciones
     tendencia_bajista = last["EMA9"] < last["EMA50"]
     tendencia_alcista = last["EMA9"] > last["EMA50"]
@@ -34,8 +45,7 @@ def scanner(ticker):
     toca_ema50 = abs(last["Close"] - last["EMA50"]) / last["EMA50"] < 0.005
     macd_no_cruce = last["MACD_hist"] * prev["MACD_hist"] > 0
     rsi_bajo = last["RSI"] < 50
-    
-    # Estrategia
+
     if tendencia_bajista and vela_verde and toca_ema9 and macd_no_cruce and rsi_bajo:
         return f"{ticker}: Señal en tendencia bajista tocando EMA9"
     elif tendencia_alcista and vela_verde and (toca_ema9 or toca_ema50) and macd_no_cruce and rsi_bajo:
