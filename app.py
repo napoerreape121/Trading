@@ -10,18 +10,19 @@ st.set_page_config(page_title="Asistente Cuantitativo CEDEARs", page_icon="🤖"
 st.title("🤖 Asistente Consultivo de Trading de CEDEARs")
 st.write("Estrategia algorítmica pura: EMAs, Volatilidad ATR, Gestión del 2% y Costos Balanz desglosados.")
 
-# Credenciales de Telegram (Verificadas)
+# Credenciales de Telegram (Fijas y Verificadas)
 TELEGRAM_TOKEN = "8624285419:AAHS-aTMjxM9H33dqtqC4JCQzwyqqL_Q71Y"
 TELEGRAM_CHAT_ID = "6872048498"
 
 def enviar_alerta_telegram(mensaje):
-    """Función nativa corregida para despachar notificaciones directas a tu celular"""
+    """Función de red corregida para despachar notificaciones directas a tu celular"""
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
     try:
-        requests.post(url, json=payload, timeout=10)
+        r = requests.post(url, json=payload, timeout=10)
+        return r.status_code == 200
     except Exception:
-        pass
+        return False
 
 # Listado completo de CEDEARs configurados
 tickers = [
@@ -60,20 +61,29 @@ DERECHOS_BYMA = 0.0005    # 0.05%
 IVA_FACTOR = 1.21         # 21% sobre comisiones
 COSTO_OPERATIVO_TOTAL = (ARANCEL_BALANZ + DERECHOS_BYMA) * IVA_FACTOR  # Aprox 0.6655%
 
+# BOTÓN DE PRUEBA DE CONEXIÓN
+if st.sidebar.button("🔔 Probar Conexión de Telegram"):
+    exito = enviar_alerta_telegram("✨ ¡Conexión Exitosa! Tu bot de asistencia ya puede enviarte alertas de CEDEARs al celular.")
+    if exito:
+        st.sidebar.success("¡Mensaje de prueba enviado! Revisa tu Telegram.")
+    else:
+        st.sidebar.error("Error al enviar. Verifica el Token o Chat ID.")
+
 if st.button("🚀 Ejecutar Escáner y Despachar Alertas"):
     with st.spinner("Analizando datos históricos y estructuras de gráficos..."):
         try:
+            # Requerimos 6 meses de historial diario para calcular EMA 50, MACD y el ATR 14
             datos_mercado = yf.download(tickers, period="6mo", interval="1d", progress=False)
         except Exception as e:
             st.error(f"Error de conexión con los servidores de mercado: {e}")
             datos_mercado = None
 
     if datos_mercado is not None and not datos_mercado.empty:
+        # SOLUCIÓN AL ERROR: La lista se declara AFUERA del bucle para acumular todas las oportunidades
         ordenes_del_dia = []
 
         for ticker in tickers:
             try:
-                # Filtrar datos por activo
                 df_ticker = pd.DataFrame()
                 df_ticker['Close'] = datos_mercado['Close'][ticker].dropna()
                 df_ticker['Open'] = datos_mercado['Open'][ticker].dropna()
@@ -87,25 +97,22 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas"):
                 precio_apertura = float(df_ticker['Open'].iloc[-1])
                 precio_minimo = float(df_ticker['Low'].iloc[-1])
                 
-                # Indicador 1: Estructura de EMAs
+                # Indicadores técnicos
                 ema9 = df_ticker['Close'].ewm(span=9, adjust=False).mean().iloc[-1]
                 ema50 = df_ticker['Close'].ewm(span=50, adjust=False).mean().iloc[-1]
                 
-                # Indicador 2: ATR de 14 períodos para volatilidad del gráfico
                 high_low = df_ticker['High'] - df_ticker['Low']
                 high_close_prev = abs(df_ticker['High'] - df_ticker['Close'].shift())
                 low_close_prev = abs(df_ticker['Low'] - df_ticker['Close'].shift())
                 true_range = pd.concat([high_low, high_close_prev, low_close_prev], axis=1).max(axis=1)
                 atr14 = true_range.rolling(14).mean().iloc[-1]
                 
-                # Indicador 3: RSI de 14 períodos
                 delta = df_ticker['Close'].diff()
                 gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
                 loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
                 rs = gain / loss
                 rsi14 = 100 - (100 / (1 + rs)).iloc[-1]
                 
-                # Indicador 4: MACD (12, 26, 9)
                 exp1 = df_ticker['Close'].ewm(span=12, adjust=False).mean()
                 exp2 = df_ticker['Close'].ewm(span=26, adjust=False).mean()
                 macd_line = exp1 - exp2
@@ -113,7 +120,7 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas"):
                 histograma_macd = (macd_line - signal_line).iloc[-1]
                 hist_anterior = (macd_line - signal_line).iloc[-2]
                 
-                # REGLAS DE LA ESTRATEGIA DISEÑADA
+                # Reglas de la estrategia
                 es_vela_verde = precio_actual > precio_apertura
                 tendencia_alcista = precio_actual > ema50
                 
@@ -135,40 +142,31 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas"):
                         contexto_txt = "Rebote Técnico Bajista (Vela Verde en EMA 9) con espacio en RSI."
 
                 if disparar_estrategia:
-                    # 1. El Triángulo de Hierro en la Entrada
                     precio_entrada_neto = precio_actual * (1 + COSTO_OPERATIVO_TOTAL)
-                    
-                    # 2. Análisis del gráfico para el Stop Loss Dinámico (2 veces el ATR abajo de la EMA)
                     stop_loss_grafico = ema_referencia - (2 * atr14)
                     if stop_loss_grafico >= precio_actual: 
                         stop_loss_grafico = precio_actual * 0.97
                     
                     precio_salida_stop_neto = stop_loss_grafico * (1 - COSTO_OPERATIVO_TOTAL)
-                    
-                    # 3. Pérdida Real por Acción calculada
                     perdida_por_accion = precio_entrada_neto - precio_salida_stop_neto
                     
-                    # 4. Calculadora del 2% (Tamaño de Posición)
                     cantidad_cedears = int(riesgo_maximo_ars // perdida_por_accion)
-                    
                     if cantidad_cedears <= 0:
                         continue
                         
                     monto_total_compra = precio_entrada_neto * cantidad_cedears
                     
-                    # 5. Módulo de Argumentación y Score Institucional
                     puntos_score = 0
                     if rsi14 > 40 and rsi14 < 65: puntos_score += 1
                     if histograma_macd > hist_anterior: puntos_score += 1
                     
-                    if puntos_score == 2: score_txt = "⭐ PREMIUM (Todos los indicadores acompañan)"
-                    elif puntos_score == 1: score_txt = "⚡ REGULAR (Estrategia válida, momento moderado)"
-                    else: score_txt = "⚠️ NEUTRAL (Estructura justa, sin fuerza de momento)"
+                    if puntos_score == 2: score_txt = "⭐ PREMIUM"
+                    elif puntos_score == 1: score_txt = "⚡ REGULAR"
+                    else: score_txt = "⚠️ NEUTRAL"
                     
                     simbolo_limpio = str(ticker.split('.')[0])
                     
-                    # Guardar para la tabla interactiva de Streamlit
-                    ordenes_del_dia = []
+                    # Añadir a la lista colectiva sin borrar los anteriores
                     ordenes_del_dia.append({
                         "CEDEAR": simbolo_limpio,
                         "Precio Mercado": f"$ {precio_actual:,.2f}",
@@ -179,29 +177,27 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas"):
                         "Argumentación Score": score_txt
                     })
                     
-                    # 6. MÓDULO TELEGRAM: Envío verificado
                     msg_telegram = (
                         f"🤖 *¡ALERTA DE TRADING OBJETIVA!*\n\n"
-                        f"📈 *Activo:* `{simbolo_limpio}` (CEDEAR)\n"
+                        f"📈 *Activo:* `{simbolo_limpio}`\n"
                         f"🟢 *Orden:* COMPRAR\n"
                         f"🧮 *Cantidad Estricta:* {cantidad_cedears} unidades\n\n"
                         f"💵 *Precio Entrada:* ${precio_actual:,.2f}\n"
-                        f"📐 *Precio Entrada Neto:* ${precio_entrada_neto:,.2f} (Con IVA/BYMA/Balanz)\n"
+                        f"📐 *Precio Entrada Neto:* ${precio_entrada_neto:,.2f}\n"
                         f"🛡️ *Stop Loss (Análisis Gráfico):* ${stop_loss_grafico:,.2f}\n"
-                        f"📊 *Riesgo Financiero:* Cubierto bajo la regla del 2%\n\n"
+                        f"📊 *Riesgo:* Cubierto bajo la regla del 2%\n\n"
                         f"🔍 *Score Técnico:* {score_txt}\n"
-                        f"📝 *Motivo:* {contexto_txt} RSI: {rsi14:.1f}."
+                        f"📝 *Motivo:* {contexto_txt}"
                     )
                     enviar_alerta_telegram(msg_telegram)
 
             except Exception:
                 continue
 
-        # Renderizar la tabla de toma de decisiones en la web
+        # Renderizar la tabla con todas las oportunidades juntas
         if ordenes_del_dia:
             df_final = pd.DataFrame(ordenes_del_dia)
-            st.success("🤖 ¡Análisis completado! Las órdenes válidas han sido enviadas a tu Telegram de forma automatizada.")
+            st.success("🤖 ¡Análisis completado! Las órdenes válidas han sido enviadas a tu Telegram.")
             st.dataframe(df_final, use_container_width=True)
         else:
-            st.info("Mercado escaneado. Ningún activo cumple con los criterios técnicos y estructurales estrictos hoy.")
-
+            st.info("Mercado escaneado. Ningún activo cumple con los criterios técnicos estrictos hoy.")
