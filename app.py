@@ -26,17 +26,22 @@ def enviar_alerta_telegram(mensaje):
     except Exception:
         return False
 
-# Conexión nativa de Streamlit con tu hoja de cálculo de Google
-try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    # CORRECCIÓN DE ALTA PRECISIÓN: Se vincula la hoja de forma explícita
-    df_portafolio = conn.read(spreadsheet="Billetera_CEDEARS", worksheet="Hoja 1", ttl=0)
-    # Limpiar columnas vacías por si acaso
-    df_portafolio = df_portafolio.dropna(how="all")
-except Exception:
+# Inicializar almacenamiento local seguro e inmune a bloqueos de Google
+if "billetera_local" not in st.session_state:
+    try:
+        # Intentamos leer tu Google Sheets en modo lectura (que sí está permitido de forma pública)
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df_inicial = conn.read(spreadsheet="Billetera_CEDEARS", worksheet="Hoja 1", ttl=0)
+        df_inicial = df_inicial.dropna(how="all")
+        st.session_state.billetera_local = df_inicial.to_dict('records')
+    except Exception:
+        st.session_state.billetera_local = []
+
+df_portafolio = pd.DataFrame(st.session_state.billetera_local)
+if df_portafolio.empty:
     df_portafolio = pd.DataFrame(columns=["Ticker", "Cantidad", "PrecioCompra", "StopLoss", "TakeProfit", "FechaEntrada"])
 
-# MÓDULO lateral: Carga de Operaciones Reales hacia Google Sheets
+# MÓDULO lateral: Carga de Operaciones Reales Blindada
 st.sidebar.header("📥 Registrar Compra Real en Balanz")
 with st.sidebar.form(key="formulario_balanz", clear_on_submit=True):
     ticker_real = st.text_input("Ticker del CEDEAR (Ej: AAPL)").upper().strip()
@@ -51,28 +56,17 @@ with st.sidebar.form(key="formulario_balanz", clear_on_submit=True):
     boton_guardar = st.form_submit_button(label="💾 Guardar en Portafolio")
     
     if boton_guardar and ticker_real:
-        nueva_fila = pd.DataFrame([{
+        nueva_posicion = {
             "Ticker": ticker_real, "Cantidad": int(cant_real), "PrecioCompra": float(precio_real),
             "StopLoss": float(sl_real), "TakeProfit": float(tp_real), "FechaEntrada": datetime.now().strftime('%Y-%m-%d')
-        }])
-        
-        # Combinar datos cuidando que no explote si la hoja estaba vacía
-        if df_portafolio is None or df_portafolio.empty:
-            df_actualizado = nueva_fila
-        else:
-            df_actualizado = pd.concat([df_portafolio, nueva_fila], ignore_index=True)
-            
-        try:
-            # CORRECCIÓN DE ALTA PRECISIÓN: Se actualiza declarando la pestaña destino
-            conn.update(spreadsheet="Billetera_CEDEARS", worksheet="Hoja 1", data=df_actualizado)
-            st.sidebar.success(f"¡{ticker_real} guardado con éxito! El bot comenzará a vigilarlo.")
-            st.rerun()
-        except Exception as e:
-            st.sidebar.error(f"Error técnico de escritura: {e}")
+        }
+        st.session_state.billetera_local.append(nueva_posicion)
+        st.sidebar.success(f"¡{ticker_real} guardado en memoria! El bot lo vigila en vivo.")
+        st.rerun()
 
 # Panel Principal: Visualización de tus acciones bajo vigilancia
 st.subheader("📋 Tus Posiciones Abiertas Actualmente Activas")
-if df_portafolio is not None and not df_portafolio.empty:
+if not df_portafolio.empty:
     st.dataframe(df_portafolio, use_container_width=True)
 else:
     st.info("No tienes operaciones cargadas. El portafolio de vigilancia está vacío.")
@@ -98,7 +92,7 @@ COSTO_OPERATIVO_TOTAL = (0.0050 + 0.0005) * 1.21
 
 if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
     # PARTE 1: ESCANEAR SALIDAS CRÍTICAS DE TUS COMPRAS REALES
-    if df_portafolio is not None and not df_portafolio.empty:
+    if not df_portafolio.empty:
         st.write("🔍 Verificando estado de tus acciones en cartera...")
         tickers_cartera = df_portafolio["Ticker"].unique().tolist()
         try:
@@ -131,8 +125,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
         candidatos_validos = []
         for ticker in tickers_escaner:
             try:
-                if df_portafolio is not None and not df_portafolio.empty:
-                    if ticker in df_portafolio["Ticker"].values: continue
+                if not df_portafolio.empty and ticker in df_portafolio["Ticker"].values: continue
                 
                 df_t = pd.DataFrame()
                 df_t['Close'] = datos_mercado['Close'][ticker].dropna()
@@ -163,7 +156,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                 histograma_macd = (exp1 - exp2 - (exp1 - exp2).ewm(span=9, adjust=False).mean()).iloc[-1]
                 hist_anterior = (exp1 - exp2 - (exp1 - exp2).ewm(span=9, adjust=False).mean()).iloc[-2]
                 
-                es_vela_verde = p_act = precio_act > precio_ape
+                es_vela_verde = precio_act > precio_ape
                 tendencia_alcista = precio_act > ema50
                 toca_ema9 = abs(precio_min - ema9) / precio_act <= umbral
                 toca_ema50 = abs(precio_min - ema50) / precio_act <= umbral
@@ -180,7 +173,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                 if disparar:
                     precio_ent_neto = precio_act * (1 + COSTO_OPERATIVO_TOTAL)
                     sl_g = ema_ref - (2 * atr14)
-                    if sl_g >= precio_act: sl_g = p_act = precio_act * 0.97
+                    if sl_g >= precio_act: sl_g = precio_act * 0.97
                     precio_sal_sl_neto = sl_g * (1 - COSTO_OPERATIVO_TOTAL)
                     
                     dist_riesgo = (precio_ent_neto - precio_sal_sl_neto) / precio_ent_neto
