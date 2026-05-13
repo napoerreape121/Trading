@@ -57,6 +57,7 @@ st.sidebar.header("⚙️ Calibración de Filtros")
 ratio_beneficio = st.sidebar.slider("Ratio Recompensa / Riesgo Mínimo", 1.5, 3.5, 2.0, step=0.1)
 umbral = st.sidebar.slider("Tolerancia de proximidad EMA", 0.001, 0.015, 0.005, step=0.001)
 
+# Estructura de costos del Triángulo de Hierro (Arancel 0.50% + BYMA 0.05% + IVA)
 COSTO_OPERATIVO_TOTAL = (0.0050 + 0.0005) * 1.21 
 
 # VALIDACIÓN DEL HORARIO DE APERTURA GANADOR (11:00h a 13:00h)
@@ -79,7 +80,8 @@ if st.button("🚀 Ejecutar Algoritmo de Asignación y Selección"):
             st.error(f"Error de conexión: {e}")
             datos_mercado = None
 
-    if datos_mercado is not None and not datos_market_empty := datos_mercado.empty:
+    # CORRECCIÓN DEFINITIVA DE SINTAXIS LÓGICA LINEAL
+    if datos_mercado is not None and not datos_mercado.empty:
         candidatos_validos = []
 
         for ticker in tickers:
@@ -149,15 +151,13 @@ if st.button("🚀 Ejecutar Algoritmo de Asignación y Selección"):
                     if cantidad_cedears <= 0: continue
                     monto_total_compra = precio_entrada_neto * cantidad_cedears
                     
-                    # FILTRO DE FACTIBILIDAD REAL: El capital debe alcanzar para comprar nominales enteros 
-                    # Y el precio de una sola unidad no debe superar tu saldo total disponible en Balanz
                     if monto_total_compra > capital_cuenta or precio_entrada_neto > capital_cuenta: continue
                     
                     # CÁLCULO DEL SCORE CUANTITATIVO DE CALIDAD (0 a 3 Puntos)
                     score_calidad = 0
                     if rsi14 > 40 and rsi14 < 60: score_calidad += 1
                     if histograma_macd > hist_anterior: score_calidad += 1
-                    if tendencia_alcista: score_calidad += 1 # Otorga prioridad a activos a favor de corriente mayor
+                    if tendencia_alcista: score_calidad += 1
                     
                     candidatos_validos.append({
                         "Ticker": ticker.split('.')[0], "Precio_Mercado": precio_actual, "Precio_Neto": precio_entrada_neto,
@@ -202,4 +202,3 @@ if st.button("🚀 Ejecutar Algoritmo de Asignación y Selección"):
             st.dataframe(df_oportunidades, use_container_width=True)
         else:
             st.info("Ningún CEDEAR cumple las condiciones técnicas y las restricciones de lote mínimo para tu saldo actual de cuenta hoy.")
-
