@@ -178,6 +178,3 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas Exactas"):
             st.dataframe(df_final, use_container_width=True)
         else:
             st.info("Ningún CEDEAR cumple las condiciones exactas de entrada e indicadores en la rueda de hoy.")
-
-        else:
-            st.info("Ningún CEDEAR cumple las condiciones exactas de entrada e indicadores en la rueda de hoy.")
