@@ -4,19 +4,19 @@ import pandas as pd
 import numpy as np
 import requests
 
-# Configuración de la página en internet
-st.set_page_config(page_title="Asistente Cuantitativo CEDEARs", page_icon="🤖", layout="wide")
+# Configuración del panel de control interactivo en internet
+st.set_page_config(page_title="Asistente Cuantitativo Pro", page_icon="🤖", layout="wide")
 
-st.title("🤖 Asistente Consultivo de Trading de CEDEARs")
-st.write("Estrategia algorítmica pura: EMAs, Volatilidad ATR, Gestión del 2% y Costos Balanz desglosados.")
+st.title("🤖 Asistente de Trading de CEDEARs - Modelo de Alta Fidelidad")
+st.write("Estrategia Calibrada con Ratio Riesgo/Beneficio Fijo. Envío directo de señales y órdenes exactas a Telegram.")
 
-# Credenciales de Telegram (Fijas y Verificadas)
+# Credenciales fijas y verificadas de tu canal de Telegram
 TELEGRAM_TOKEN = "8624285419:AAHS-aTMjxM9H33dqtqC4JCQzwyqqL_Q71Y"
 TELEGRAM_CHAT_ID = "6872048498"
 
 def enviar_alerta_telegram(mensaje):
-    """Función de red corregida para despachar notificaciones directas a tu celular"""
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    """Módulo de comunicación nativo para despachar alertas estructuradas a tu celular"""
+    url = f"telegram.org{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
     try:
         r = requests.post(url, json=payload, timeout=10)
@@ -24,7 +24,7 @@ def enviar_alerta_telegram(mensaje):
     except Exception:
         return False
 
-# Listado completo de CEDEARs configurados
+# Lista matriz de tus 80 CEDEARs en pesos
 tickers = [
     'AAL.BA','ABT.BA','ACWI.BA','ADBE.BA','AMD.BA',
     'AMZN.BA','AAPL.BA','ARM.BA','ARKK.BA','ASML.BA',
@@ -45,41 +45,36 @@ tickers = [
     'WMT.BA','XOM.BA'
 ]
 
-# Menú lateral para controlar tu billetera y el algoritmo sin tocar código
-st.sidebar.header("🧮 Gestión de Billetera")
-capital_total = st.sidebar.number_input("Capital Total Disponible ($ ARS)", min_value=10000, value=1000000, step=50000)
-riesgo_maximo_ars = capital_total * 0.02
+# Menú lateral interactivo para ajustar tu balance en pesos de Balanz en tiempo real
+st.sidebar.header("💰 Parámetros Financieros Reales")
+capital_cuenta = st.sidebar.number_input("Capital de tu Cuenta ($ ARS)", min_value=10000, value=158000, step=10000)
+riesgo_maximo_ars = capital_cuenta * 0.02
 
 st.sidebar.markdown(f"**Tu riesgo máximo permitido (2%):** ${riesgo_maximo_ars:,.2f}")
 
-st.sidebar.header("⚙️ Parámetros de Sensibilidad")
+st.sidebar.header("⚙️ Configuración del Algoritmo")
+ratio_beneficio = st.sidebar.slider("Ratio Recompensa / Riesgo (Ej: 2.0 = Ganar el doble)", 1.5, 3.5, 2.0, step=0.1)
 umbral = st.sidebar.slider("Tolerancia de proximidad EMA", 0.001, 0.015, 0.005, step=0.001)
 
-# Estructura del Triángulo de Hierro (Costos fijos Balanz deducidos matemáticamente)
-ARANCEL_BALANZ = 0.0050   # 0.50%
-DERECHOS_BYMA = 0.0005    # 0.05%
-IVA_FACTOR = 1.21         # 21% sobre comisiones
-COSTO_OPERATIVO_TOTAL = (ARANCEL_BALANZ + DERECHOS_BYMA) * IVA_FACTOR  # Aprox 0.6655%
+# Estructura de costos del Triángulo de Hierro (Arancel 0.50% + BYMA 0.05% + IVA)
+COSTO_OPERATIVO_TOTAL = (0.0050 + 0.0005) * 1.21 
 
-# BOTÓN DE PRUEBA DE CONEXIÓN
+# BOTÓN EN LA BARRA LATERAL PARA PROBAR QUE LA ANTENA SIGA ACTIVA
 if st.sidebar.button("🔔 Probar Conexión de Telegram"):
-    exito = enviar_alerta_telegram("✨ ¡Conexión Exitosa! Tu bot de asistencia ya puede enviarte alertas de CEDEARs al celular.")
-    if exito:
-        st.sidebar.success("¡Mensaje de prueba enviado! Revisa tu Telegram.")
-    else:
-        st.sidebar.error("Error al enviar. Verifica el Token o Chat ID.")
+    exito = enviar_alerta_telegram("✨ ¡Conexión Exitosa! Tu bot con Ratio Fijo y Cantidades Enteras ya está operativo.")
+    if exito: st.sidebar.success("¡Mensaje enviado! Revisa tu celular.")
+    else: st.sidebar.error("Error de enlace. Verifica si el chat con el bot en Telegram está abierto.")
 
-if st.button("🚀 Ejecutar Escáner y Despachar Alertas"):
-    with st.spinner("Analizando datos históricos y estructuras de gráficos..."):
+if st.button("🚀 Ejecutar Escáner y Despachar Alertas Exactas"):
+    with st.spinner("Escaneando el mercado local y analizando gráficos de volatilidad..."):
         try:
-            # Requerimos 6 meses de historial diario para calcular EMA 50, MACD y el ATR 14
+            # Descargamos los últimos 6 meses de datos diarios para tener las curvas de EMAs y el ATR actualizados al día de hoy
             datos_mercado = yf.download(tickers, period="6mo", interval="1d", progress=False)
         except Exception as e:
-            st.error(f"Error de conexión con los servidores de mercado: {e}")
+            st.error(f"Error de conexión con los servidores de bolsa: {e}")
             datos_mercado = None
 
     if datos_mercado is not None and not datos_mercado.empty:
-        # SOLUCIÓN AL ERROR: La lista se declara AFUERA del bucle para acumular todas las oportunidades
         ordenes_del_dia = []
 
         for ticker in tickers:
@@ -90,14 +85,14 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas"):
                 df_ticker['Low'] = datos_mercado['Low'][ticker].dropna()
                 df_ticker['High'] = datos_mercado['High'][ticker].dropna()
                 
-                if len(df_ticker) < 50:
-                    continue
+                if len(df_ticker) < 50: continue
                 
+                # Extracción de la última vela cerrada en internet
                 precio_actual = float(df_ticker['Close'].iloc[-1])
                 precio_apertura = float(df_ticker['Open'].iloc[-1])
                 precio_minimo = float(df_ticker['Low'].iloc[-1])
                 
-                # Indicadores técnicos
+                # Indicadores matemáticos del activo
                 ema9 = df_ticker['Close'].ewm(span=9, adjust=False).mean().iloc[-1]
                 ema50 = df_ticker['Close'].ewm(span=50, adjust=False).mean().iloc[-1]
                 
@@ -113,17 +108,9 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas"):
                 rs = gain / loss
                 rsi14 = 100 - (100 / (1 + rs)).iloc[-1]
                 
-                exp1 = df_ticker['Close'].ewm(span=12, adjust=False).mean()
-                exp2 = df_ticker['Close'].ewm(span=26, adjust=False).mean()
-                macd_line = exp1 - exp2
-                signal_line = macd_line.ewm(span=9, adjust=False).mean()
-                histograma_macd = (macd_line - signal_line).iloc[-1]
-                hist_anterior = (macd_line - signal_line).iloc[-2]
-                
-                # Reglas de la estrategia
+                # REGLAS EXACTAS DE ENTRADA PROBADAS
                 es_vela_verde = precio_actual > precio_apertura
                 tendencia_alcista = precio_actual > ema50
-                
                 toca_ema9 = abs(precio_minimo - ema9) / precio_actual <= umbral
                 toca_ema50 = abs(precio_minimo - ema50) / precio_actual <= umbral
                 
@@ -134,70 +121,71 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas"):
                 if tendencia_alcista and es_vela_verde and (toca_ema9 or toca_ema50):
                     disparar_estrategia = True
                     ema_referencia = ema50 if toca_ema50 else ema9
-                    contexto_txt = "Estructura Alcista + Confirmación Vela Verde + Toque de Soporte."
-                elif not tendencia_alcista and es_vela_verde and toca_ema9:
-                    if rsi14 <= 55:
-                        disparar_estrategia = True
-                        ema_referencia = ema9
-                        contexto_txt = "Rebote Técnico Bajista (Vela Verde en EMA 9) con espacio en RSI."
+                    contexto_txt = "Estructura Alcista Mayor + Confirmación de Vela Verde."
+                elif not tendencia_alcista and es_vela_verde and toca_ema9 and rsi14 <= 55:
+                    disparar_estrategia = True
+                    ema_referencia = ema9
+                    contexto_txt = "Rebote Técnico en Tendencia Bajista Corta."
 
                 if disparar_estrategia:
+                    # 1. Triángulo de Hierro aplicado al precio de entrada
                     precio_entrada_neto = precio_actual * (1 + COSTO_OPERATIVO_TOTAL)
+                    
+                    # 2. Stop Loss Dinámico calculado por la volatilidad del gráfico (ATR)
                     stop_loss_grafico = ema_referencia - (2 * atr14)
-                    if stop_loss_grafico >= precio_actual: 
-                        stop_loss_grafico = precio_actual * 0.97
-                    
+                    if stop_loss_grafico >= precio_actual: stop_loss_grafico = precio_actual * 0.97
                     precio_salida_stop_neto = stop_loss_grafico * (1 - COSTO_OPERATIVO_TOTAL)
-                    perdida_por_accion = precio_entrada_neto - precio_salida_stop_neto
                     
+                    # 3. CÁLCULO ASIMÉTRICO DEL RATIO: El Take Profit se clava al doble del riesgo porcentual real
+                    distancia_riesgo_pct = (precio_entrada_neto - precio_salida_stop_neto) / precio_entrada_neto
+                    precio_take_profit = precio_actual * (1 + (distancia_riesgo_pct * ratio_beneficio))
+                    
+                    # 4. Limitador de Lote Mínimo: Redondeo estricto a nominales enteros
+                    perdida_por_accion = precio_entrada_neto - precio_salida_stop_neto
                     cantidad_cedears = int(riesgo_maximo_ars // perdida_por_accion)
-                    if cantidad_cedears <= 0:
-                        continue
+                    
+                    if cantidad_cedears <= 0: continue
                         
                     monto_total_compra = precio_entrada_neto * cantidad_cedears
+                    # Filtro de validación de saldo: Si cuesta más de lo que tienes en la caja, se bloquea la orden
+                    if monto_total_compra > capital_cuenta or p_compra > capital_cuenta: continue 
                     
-                    puntos_score = 0
-                    if rsi14 > 40 and rsi14 < 65: puntos_score += 1
-                    if histograma_macd > hist_anterior: puntos_score += 1
+                    simbolo_corto = ticker.split('.')[0]
                     
-                    if puntos_score == 2: score_txt = "⭐ PREMIUM"
-                    elif puntos_score == 1: score_txt = "⚡ REGULAR"
-                    else: score_txt = "⚠️ NEUTRAL"
-                    
-                    simbolo_limpio = str(ticker.split('.')[0])
-                    
-                    # Añadir a la lista colectiva sin borrar los anteriores
+                    # Guardar el registro en la lista visual de la web
                     ordenes_del_dia.append({
-                        "CEDEAR": simbolo_limpio,
-                        "Precio Mercado": f"$ {precio_actual:,.2f}",
-                        "Precio Neto (Balanz)": f"$ {precio_entrada_neto:,.2f}",
-                        "Stop Loss Dinámico": f"$ {stop_loss_grafico:,.2f}",
-                        "Cantidad a Comprar": cantidad_cedears,
-                        "Capital Requerido": f"$ {monto_total_compra:,.2f}",
-                        "Argumentación Score": score_txt
+                        "CEDEAR": simbolo_corto,
+                        "Precio Pantalla": f"$ {precio_actual:,.2f}",
+                        "Precio Neto Entrada": f"$ {precio_entrada_neto:,.2f}",
+                        "Stop Loss (ATR)": f"$ {stop_loss_grafico:,.2f}",
+                        "Take Profit (Ratio)": f"$ {precio_take_profit:,.2f}",
+                        "Cantidad Sugerida": cantidad_cedears,
+                        "Total Operación": f"$ {monto_total_compra:,.2f}"
                     })
                     
+                    # 5. MENSAJE ENRIQUECIDO DESGLOSADO DIRECTO A TU TELEGRAM
                     msg_telegram = (
-                        f"🤖 *¡ALERTA DE TRADING OBJETIVA!*\n\n"
-                        f"📈 *Activo:* `{simbolo_limpio}`\n"
+                        f"🤖 *¡ALERTA DE SEÑAL DE TRADING! (Ratio {ratio_beneficio}:1)*\n\n"
+                        f"📈 *CEDEAR:* `{simbolo_corto}`\n"
                         f"🟢 *Orden:* COMPRAR\n"
-                        f"🧮 *Cantidad Estricta:* {cantidad_cedears} unidades\n\n"
-                        f"💵 *Precio Entrada:* ${precio_actual:,.2f}\n"
-                        f"📐 *Precio Entrada Neto:* ${precio_entrada_neto:,.2f}\n"
-                        f"🛡️ *Stop Loss (Análisis Gráfico):* ${stop_loss_grafico:,.2f}\n"
-                        f"📊 *Riesgo:* Cubierto bajo la regla del 2%\n\n"
-                        f"🔍 *Score Técnico:* {score_txt}\n"
-                        f"📝 *Motivo:* {contexto_txt}"
+                        f"🧮 *Cantidad Nominal Exacta:* {cantidad_cedears} unidades\n\n"
+                        f"💵 *Precio en Pantalla:* ${precio_actual:,.2f}\n"
+                        f"📐 *Precio de Entrada Neto:* ${precio_entrada_neto:,.2f} (Deducido Balanz)\n"
+                        f"🛡️ *STOP LOSS EN PESOS:* ${stop_loss_grafico:,.2f}\n"
+                        f"🎯 *TAKE PROFIT EN PESOS:* ${precio_take_profit:,.2f}\n\n"
+                        f"💰 *Costo de la Operación:* ${monto_total_compra:,.2f}\n"
+                        f"📊 *Control de Riesgo:* Protegido bajo el 2% de tu cuenta.\n"
+                        f"📝 *Justificación:* {contexto_txt}"
                     )
                     enviar_alerta_telegram(msg_telegram)
 
             except Exception:
                 continue
 
-        # Renderizar la tabla con todas las oportunidades juntas
+        # Renderizar la tabla de control en tu pestaña de internet
         if ordenes_del_dia:
             df_final = pd.DataFrame(ordenes_del_dia)
-            st.success("🤖 ¡Análisis completado! Las órdenes válidas han sido enviadas a tu Telegram.")
+            st.success("🤖 ¡Análisis de Ratio completado con éxito! Las alertas desglosadas en pesos ya se enviaron a tu Telegram.")
             st.dataframe(df_final, use_container_width=True)
         else:
-            st.info("Mercado escaneado. Ningún activo cumple con los criterios técnicos estrictos hoy.")
+            st.info("Ningún CEDEAR cumple las condiciones exactas de entrada e indicadores en la rueda de hoy.")
