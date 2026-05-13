@@ -178,7 +178,9 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                 if disparar:
                     precio_ent_neto = precio_act * (1 + COSTO_OPERATIVO_TOTAL)
                     sl_g = ema_ref - (2 * atr14)
-                    if sl_g >= p_compra_min := precio_act * 0.97: sl_g = precio_act * 0.97
+                    # CORRECCIÓN DE LA LÍNEA DE ERROR: Sintaxis de comparación limpia
+                    if sl_g >= precio_act * 0.97: 
+                        sl_g = precio_act * 0.97
                     precio_sal_sl_neto = sl_g * (1 - COSTO_OPERATIVO_TOTAL)
                     
                     dist_riesgo = (precio_ent_neto - precio_sal_sl_neto) / precio_ent_neto
@@ -197,7 +199,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                     if tendencia_alcista: score += 1
                     
                     candidatos_validos.append({
-                        "Ticker": ticker, "Precio": precio_act, "Neto": precio_ent_neto,
+                        "Ticker": ticker.split('.'), "Precio": precio_act, "Neto": precio_ent_neto,
                         "StopLoss": sl_g, "TakeProfit": precio_tp, "Cantidad": cant_cedears,
                         "Total": monto_compra, "Score": score
                     })
@@ -206,18 +208,18 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
 
         if candidatos_validos:
             df_ops = pd.DataFrame(candidatos_validos).sort_values(by="Score", ascending=False).reset_index(drop=True)
-            mejor_opcion = df_ops.iloc[0] # Corrección estricta de índice de fila unificada
+            mejor_opcion = df_ops.iloc[0] # Indexación de fila perfecta
             
             st.success("🤖 ¡Análisis de Oportunidades Completado!")
             st.subheader("🎯 La Mejor Decisión Sugerida por el Cerebro Cuantitativo")
             col_a, col_b, col_c = st.columns(3)
-            col_a.metric("CEDEAR", mejor_opcion["Ticker"])
+            col_a.metric("CEDEAR", mejor_opcion["Ticker"][0])
             col_b.metric("Cantidad de Nominales", int(mejor_opcion["Cantidad"]))
             col_c.metric("Capital Invertido Neto", f"$ {mejor_opcion['Total']:,.2f}")
             
             msg_tg = (
-                f"🤖 *¡ASIGNACIÓN DE CAPITAL REALISTA EN APERTURA!*\n\n"
-                f"🎯 *CEDEAR Seleccionado:* `{mejor_opcion['Ticker']}`\n"
+                f"🤖 *¡ASIGNACIÓN DE CAPITAL REALISTA EN APERTURA! (Base Local Fija)*\n\n"
+                f"🎯 *CEDEAR Seleccionado:* `{mejor_opcion['Ticker'][0]}`\n"
                 f"🧮 *Cantidad nominal a comprar:* {int(mejor_opcion['Cantidad'])} unidades\n\n"
                 f"💵 *Precio Pantalla:* ${mejor_opcion['Precio']:,.2f}\n"
                 f"📐 *Precio Entrada Neto:* ${mejor_opcion['Neto']:,.2f}\n"
@@ -230,5 +232,4 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
             st.dataframe(df_ops, use_container_width=True)
         else:
             st.info("Ningún CEDEAR reúne las condiciones técnicas en la rueda en vivo de hoy.")
-
 
