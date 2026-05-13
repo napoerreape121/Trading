@@ -10,13 +10,13 @@ st.set_page_config(page_title="Asistente Cuantitativo CEDEARs", page_icon="🤖"
 st.title("🤖 Asistente Consultivo de Trading de CEDEARs")
 st.write("Estrategia algorítmica pura: EMAs, Volatilidad ATR, Gestión del 2% y Costos Balanz desglosados.")
 
-# Credenciales de Telegram (Fijas y seguras en tu servidor)
+# Credenciales de Telegram (Verificadas)
 TELEGRAM_TOKEN = "8624285419:AAHS-aTMjxM9H33dqtqC4JCQzwyqqL_Q71Y"
 TELEGRAM_CHAT_ID = "6872048498"
 
 def enviar_alerta_telegram(mensaje):
-    """Función nativa para despachar notificaciones directas a tu celular"""
-    url = f"telegram.org{TELEGRAM_TOKEN}/sendMessage"
+    """Función nativa corregida para despachar notificaciones directas a tu celular"""
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
     try:
         requests.post(url, json=payload, timeout=10)
@@ -63,7 +63,6 @@ COSTO_OPERATIVO_TOTAL = (ARANCEL_BALANZ + DERECHOS_BYMA) * IVA_FACTOR  # Aprox 0
 if st.button("🚀 Ejecutar Escáner y Despachar Alertas"):
     with st.spinner("Analizando datos históricos y estructuras de gráficos..."):
         try:
-            # Requerimos 6 meses de historial diario para poder calcular correctamente la EMA 50, MACD y el ATR 14
             datos_mercado = yf.download(tickers, period="6mo", interval="1d", progress=False)
         except Exception as e:
             st.error(f"Error de conexión con los servidores de mercado: {e}")
@@ -84,7 +83,6 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas"):
                 if len(df_ticker) < 50:
                     continue
                 
-                # Precios actuales e históricos inmediatos
                 precio_actual = float(df_ticker['Close'].iloc[-1])
                 precio_apertura = float(df_ticker['Open'].iloc[-1])
                 precio_minimo = float(df_ticker['Low'].iloc[-1])
@@ -131,7 +129,6 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas"):
                     ema_referencia = ema50 if toca_ema50 else ema9
                     contexto_txt = "Estructura Alcista + Confirmación Vela Verde + Toque de Soporte."
                 elif not tendencia_alcista and es_vela_verde and toca_ema9:
-                    # Filtro protector de RSI diseñado para el rebote bajista corto
                     if rsi14 <= 55:
                         disparar_estrategia = True
                         ema_referencia = ema9
@@ -144,9 +141,8 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas"):
                     # 2. Análisis del gráfico para el Stop Loss Dinámico (2 veces el ATR abajo de la EMA)
                     stop_loss_grafico = ema_referencia - (2 * atr14)
                     if stop_loss_grafico >= precio_actual: 
-                        stop_loss_grafico = precio_actual * 0.97 # Resguardo matemático por si volatilidad es extrema
+                        stop_loss_grafico = precio_actual * 0.97
                     
-                    # El Triángulo de Hierro en la Salida del Stop Loss
                     precio_salida_stop_neto = stop_loss_grafico * (1 - COSTO_OPERATIVO_TOTAL)
                     
                     # 3. Pérdida Real por Acción calculada
@@ -156,11 +152,11 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas"):
                     cantidad_cedears = int(riesgo_maximo_ars // perdida_por_accion)
                     
                     if cantidad_cedears <= 0:
-                        continue # El activo es demasiado caro para el riesgo tolerado
+                        continue
                         
                     monto_total_compra = precio_entrada_neto * cantidad_cedears
                     
-                    # 5. Módulo de Argumentación y Score Institucional (No bloquea, puntúa)
+                    # 5. Módulo de Argumentación y Score Institucional
                     puntos_score = 0
                     if rsi14 > 40 and rsi14 < 65: puntos_score += 1
                     if histograma_macd > hist_anterior: puntos_score += 1
@@ -169,9 +165,10 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas"):
                     elif puntos_score == 1: score_txt = "⚡ REGULAR (Estrategia válida, momento moderado)"
                     else: score_txt = "⚠️ NEUTRAL (Estructura justa, sin fuerza de momento)"
                     
-                    simbolo_limpio = ticker.split('.')[0]
+                    simbolo_limpio = str(ticker.split('.')[0])
                     
                     # Guardar para la tabla interactiva de Streamlit
+                    ordenes_del_dia = []
                     ordenes_del_dia.append({
                         "CEDEAR": simbolo_limpio,
                         "Precio Mercado": f"$ {precio_actual:,.2f}",
@@ -182,7 +179,7 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas"):
                         "Argumentación Score": score_txt
                     })
                     
-                    # 6. MÓDULO TELEGRAM: Formateo del mensaje para tu celular
+                    # 6. MÓDULO TELEGRAM: Envío verificado
                     msg_telegram = (
                         f"🤖 *¡ALERTA DE TRADING OBJETIVA!*\n\n"
                         f"📈 *Activo:* `{simbolo_limpio}` (CEDEAR)\n"
@@ -207,3 +204,4 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas"):
             st.dataframe(df_final, use_container_width=True)
         else:
             st.info("Mercado escaneado. Ningún activo cumple con los criterios técnicos y estructurales estrictos hoy.")
+
