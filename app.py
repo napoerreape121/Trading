@@ -29,7 +29,7 @@ def enviar_alerta_telegram(mensaje):
 # Conexión nativa de Streamlit con tu hoja de cálculo de Google
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
-    df_portafolio = conn.read(spreadsheet="google.com", ttl=0)
+    df_portafolio = conn.read(spreadsheet="Billetera_CEDEARs", ttl=0)
 except Exception:
     df_portafolio = pd.DataFrame(columns=["Ticker", "Cantidad", "PrecioCompra", "StopLoss", "TakeProfit", "FechaEntrada"])
 
@@ -54,7 +54,7 @@ with st.sidebar.form(key="formulario_balanz", clear_on_submit=True):
         }])
         df_actualizado = pd.concat([df_portafolio, nueva_fila], ignore_index=True)
         try:
-            conn.update(spreadsheet="google.com", data=df_actualizado)
+            conn.update(spreadsheet="Billetera_CEDEARs", data=df_actualizado)
             st.sidebar.success(f"¡{ticker_real} guardado con éxito! El bot comenzará a vigilarlo.")
             st.rerun()
         except Exception as e:
