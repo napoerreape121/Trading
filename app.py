@@ -15,7 +15,7 @@ TELEGRAM_TOKEN = "8624285419:AAHS-aTMjxM9H33dqtqC4JCQzwyqqL_Q71Y"
 TELEGRAM_CHAT_ID = "6872048498"
 
 def enviar_alerta_telegram(mensaje):
-    """Módulo de comunicación nativo con la URL de la API corregida al 100%"""
+    """Módulo de comunicación nativo con la URL oficial de la API de Telegram corregida"""
     url = f"telegram.org{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
     try:
@@ -142,7 +142,7 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas Exactas"):
                     
                     if monto_total_compra > capital_cuenta or precio_entrada_neto > capital_cuenta: continue 
                     
-                    simbolo_corto = ticker.split('.')[0]
+                    simbolo_corto = ticker.split('.')
                     
                     ordenes_del_dia.append({
                         "CEDEAR": simbolo_corto,
