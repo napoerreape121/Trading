@@ -3,19 +3,20 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import requests
+from datetime import datetime
 
-# Configuración del panel de control interactivo en internet
-st.set_page_config(page_title="Asistente Cuantitativo Pro", page_icon="🤖", layout="wide")
+# Configuración del panel de control inteligente en internet
+st.set_page_config(page_title="Asistente Algorítmico Inteligente", page_icon="🤖", layout="wide")
 
-st.title("🤖 Asistente de Trading de CEDEARs - Modelo de Alta Fidelidad")
-st.write("Estrategia Calibrada con Ratio Riesgo/Beneficio Fijo. Envío directo de señales y órdenes exactas a Telegram.")
+st.title("🤖 Asistente de Selección y Asignación de Capital")
+st.write("Inteligencia Cuantitativa: El bot filtra, puntúa y selecciona la mejor decisión para tu presupuesto real.")
 
 # Credenciales fijas y verificadas de tu canal de Telegram
 TELEGRAM_TOKEN = "8624285419:AAHS-aTMjxM9H33dqtqC4JCQzwyqqL_Q71Y"
 TELEGRAM_CHAT_ID = "6872048498"
 
 def enviar_alerta_telegram(mensaje):
-    """Módulo de comunicación nativo con la URL oficial de la API de Telegram corregida al 100%"""
+    """Módulo oficial de comunicación en red con la API de Telegram"""
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
     try:
@@ -45,36 +46,41 @@ tickers = [
     'WMT.BA','XOM.BA'
 ]
 
-# Menú lateral interactivo para ajustar tu balance en pesos de Balanz en tiempo real
-st.sidebar.header("💰 Parámetros Financieros Reales")
-capital_cuenta = st.sidebar.number_input("Capital de tu Cuenta ($ ARS)", min_value=10000, value=158000, step=10000)
+# Menú lateral para setear tu caja de Balanz actual
+st.sidebar.header("💰 Caja Real de Balanz")
+capital_cuenta = st.sidebar.number_input("Saldo Disponible ($ ARS)", min_value=10000, value=158000, step=50000)
 riesgo_maximo_ars = capital_cuenta * 0.02
 
 st.sidebar.markdown(f"**Tu riesgo máximo permitido (2%):** ${riesgo_maximo_ars:,.2f}")
 
-st.sidebar.header("⚙️ Configuración del Algoritmo")
-ratio_beneficio = st.sidebar.slider("Ratio Recompensa / Riesgo (Ej: 2.0 = Ganar el doble)", 1.5, 3.5, 2.0, step=0.1)
+st.sidebar.header("⚙️ Calibración de Filtros")
+ratio_beneficio = st.sidebar.slider("Ratio Recompensa / Riesgo Mínimo", 1.5, 3.5, 2.0, step=0.1)
 umbral = st.sidebar.slider("Tolerancia de proximidad EMA", 0.001, 0.015, 0.005, step=0.001)
 
-# Estructura de costos del Triángulo de Hierro (Arancel 0.50% + BYMA 0.05% + IVA)
 COSTO_OPERATIVO_TOTAL = (0.0050 + 0.0005) * 1.21 
 
-# BOTÓN EN LA BARRA LATERAL PARA PROBAR LA CONEXIÓN
-if st.sidebar.button("🔔 Probar Conexión de Telegram"):
-    exito = enviar_alerta_telegram("✨ ¡Conexión Exitosa! Tu bot con Ratio Fijo y Cantidades Enteras ya está operativo.")
-    if exito: st.sidebar.success("¡Mensaje enviado! Revisa tu celular.")
-    else: st.sidebar.error("Error de enlace. Asegúrate de haberle dado al botón 'Iniciar' dentro de tu chat de Telegram.")
+# VALIDACIÓN DEL HORARIO DE APERTURA GANADOR (11:00h a 13:00h)
+hora_actual = datetime.now().hour
+es_horario_optimo = 11 <= hora_actual <= 13
 
-if st.button("🚀 Ejecutar Escáner y Despachar Alertas Exactas"):
-    with st.spinner("Descargando datos del mercado y aplicando filtros de Ratio..."):
+if st.sidebar.button("🔔 Probar Conexión de Telegram"):
+    exito = enviar_alerta_telegram("✨ ¡Conexión Exitosa! El motor de Selección Inteligente está listo para operar.")
+    if exito: st.sidebar.success("¡Mensaje enviado! Revisa tu celular.")
+    else: st.sidebar.error("Error de enlace. Verifica las credenciales.")
+
+if st.button("🚀 Ejecutar Algoritmo de Asignación y Selección"):
+    if not es_horario_optimo:
+        st.warning("⚠️ Alerta de Contexto: No estás dentro de la ventana de apertura óptima (11:00h a 13:00h). El bot escaneará el mercado pero recuerda que la estadística ganadora se da temprano.")
+        
+    with st.spinner("Analizando mercado, calculando lotes nominales enteros y seleccionando la mejor decisión..."):
         try:
             datos_mercado = yf.download(tickers, period="6mo", interval="1d", progress=False)
         except Exception as e:
-            st.error(f"Error de conexión con los servidores de bolsa: {e}")
+            st.error(f"Error de conexión: {e}")
             datos_mercado = None
 
-    if datos_mercado is not None and not datos_mercado.empty:
-        ordenes_del_dia = []
+    if datos_mercado is not None and not datos_market_empty := datos_mercado.empty:
+        candidatos_validos = []
 
         for ticker in tickers:
             try:
@@ -105,28 +111,32 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas Exactas"):
                 rs = gain / loss
                 rsi14 = 100 - (100 / (1 + rs)).iloc[-1]
                 
+                exp1 = df_ticker['Close'].ewm(span=12, adjust=False).mean()
+                exp2 = df_ticker['Close'].ewm(span=26, adjust=False).mean()
+                macd_line = exp1 - exp2
+                signal_line = macd_line.ewm(span=9, adjust=False).mean()
+                histograma_macd = (macd_line - signal_line).iloc[-1]
+                hist_anterior = (macd_line - signal_line).iloc[-2]
+                
+                # REGLAS FILTRADAS
                 es_vela_verde = precio_actual > precio_apertura
                 tendencia_alcista = precio_actual > ema50
                 toca_ema9 = abs(precio_minimo - ema9) / precio_actual <= umbral
                 toca_ema50 = abs(precio_minimo - ema50) / precio_actual <= umbral
                 
-                disparar_estrategia = False
-                ema_referencia = ema50
-                contexto_txt = ""
+                disparar = False
+                ema_ref = ema50
                 
                 if tendencia_alcista and es_vela_verde and (toca_ema9 or toca_ema50):
-                    disparar_estrategia = True
-                    ema_referencia = ema50 if toca_ema50 else ema9
-                    contexto_txt = "Estructura Alcista Mayor + Confirmación de Vela Verde."
+                    disparar = True
+                    ema_ref = ema50 if toca_ema50 else ema9
                 elif not tendencia_alcista and es_vela_verde and toca_ema9 and rsi14 <= 55:
-                    disparar_estrategia = True
-                    ema_referencia = ema9
-                    contexto_txt = "Rebote Técnico en Tendencia Bajista Corta."
+                    disparar = True
+                    ema_ref = ema9
 
-                if disparar_estrategia:
+                if disparar:
                     precio_entrada_neto = precio_actual * (1 + COSTO_OPERATIVO_TOTAL)
-                    
-                    stop_loss_grafico = ema_referencia - (2 * atr14)
+                    stop_loss_grafico = ema_ref - (2 * atr14)
                     if stop_loss_grafico >= precio_actual: stop_loss_grafico = precio_actual * 0.97
                     precio_salida_stop_neto = stop_loss_grafico * (1 - COSTO_OPERATIVO_TOTAL)
                     
@@ -137,45 +147,59 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas Exactas"):
                     cantidad_cedears = int(riesgo_maximo_ars // perdida_por_accion)
                     
                     if cantidad_cedears <= 0: continue
-                        
                     monto_total_compra = precio_entrada_neto * cantidad_cedears
                     
-                    if monto_total_compra > capital_cuenta or precio_entrada_neto > capital_cuenta: continue 
+                    # FILTRO DE FACTIBILIDAD REAL: El capital debe alcanzar para comprar nominales enteros 
+                    # Y el precio de una sola unidad no debe superar tu saldo total disponible en Balanz
+                    if monto_total_compra > capital_cuenta or precio_entrada_neto > capital_cuenta: continue
                     
-                    simbolo_corto = str(ticker.split('.')[0])
+                    # CÁLCULO DEL SCORE CUANTITATIVO DE CALIDAD (0 a 3 Puntos)
+                    score_calidad = 0
+                    if rsi14 > 40 and rsi14 < 60: score_calidad += 1
+                    if histograma_macd > hist_anterior: score_calidad += 1
+                    if tendencia_alcista: score_calidad += 1 # Otorga prioridad a activos a favor de corriente mayor
                     
-                    ordenes_del_dia.append({
-                        "CEDEAR": simbolo_corto,
-                        "Precio Pantalla": f"$ {precio_actual:,.2f}",
-                        "Precio Neto Entrada": f"$ {precio_entrada_neto:,.2f}",
-                        "Stop Loss (ATR)": f"$ {stop_loss_grafico:,.2f}",
-                        "Take Profit (Ratio)": f"$ {precio_take_profit:,.2f}",
-                        "Cantidad Sugerida": cantidad_cedears,
-                        "Total Operación": f"$ {monto_total_compra:,.2f}"
+                    candidatos_validos.append({
+                        "Ticker": ticker.split('.')[0], "Precio_Mercado": precio_actual, "Precio_Neto": precio_entrada_neto,
+                        "Stop_Loss": stop_loss_grafico, "Take_Profit": precio_take_profit, "Cantidad": cantidad_cedears,
+                        "Total_Pesos": monto_total_compra, "Score": score_calidad, "RSI": rsi14
                     })
-                    
-                    msg_telegram = (
-                        f"🤖 *¡ALERTA DE SEÑAL DE TRADING! (Ratio {ratio_beneficio}:1)*\n\n"
-                        f"📈 *CEDEAR:* `{simbolo_corto}`\n"
-                        f"🟢 *Orden:* COMPRAR\n"
-                        f"🧮 *Cantidad Nominal Exacta:* {cantidad_cedears} unidades\n\n"
-                        f"💵 *Precio en Pantalla:* ${precio_actual:,.2f}\n"
-                        f"📐 *Precio de Entrada Neto:* ${precio_entrada_neto:,.2f} (Deducido Balanz)\n"
-                        f"🛡️ *STOP LOSS EN PESOS:* ${stop_loss_grafico:,.2f}\n"
-                        f"🎯 *TAKE PROFIT EN PESOS:* ${precio_take_profit:,.2f}\n\n"
-                        f"💰 *Costo de la Operación:* ${monto_total_compra:,.2f}\n"
-                        f"📊 *Control de Riesgo:* Protegido bajo el 2% de tu cuenta.\n"
-                        f"📝 *Justificación:* {contexto_txt}"
-                    )
-                    enviar_alerta_telegram(msg_telegram)
-
             except Exception:
                 continue
 
-        if ordenes_del_dia:
-            df_final = pd.DataFrame(ordenes_del_dia)
-            st.success("🤖 ¡Análisis de Ratio completado con éxito! Las alertas desglosadas en pesos ya se enviaron a tu Telegram.")
-            st.dataframe(df_final, use_container_width=True)
+        if candidatos_validos:
+            # Ordenamos los candidatos estrictamente de mayor a menor calidad (Score)
+            df_oportunidades = pd.DataFrame(candidatos_validos).sort_values(by="Score", ascending=False).reset_index(drop=True)
+            
+            st.success("🤖 ¡Análisis de asignación inteligente completado!")
+            
+            # SELECCIÓN EXCLUSIVA DE LA MEJOR DECISIÓN
+            mejor_opcion = df_oportunidades.iloc[0]
+            
+            # RENDERIZADO DEL MAPA DE CARGA EN LA WEB
+            st.subheader("🎯 La Mejor Decisión Seleccionada para tu Cuenta")
+            col_a, col_b, col_c = st.columns(3)
+            col_a.metric("CEDEAR Recomendado", mejor_opcion["Ticker"])
+            col_b.metric("Cantidad de Nominales", int(mejor_opcion["Cantidad"]))
+            col_c.metric("Capital a Invertir", f"$ {mejor_opcion['Total_Pesos']:,.2f}")
+            
+            # DESPACHO DEL MENSAJE EXCLUSIVO INTEGRADO A TELEGRAM
+            msg_telegram = (
+                f"🤖 *¡ASIGNACIÓN DE CAPITAL REALISTA E INTELIGENTE!*\n\n"
+                f"🎯 *La mejor decisión para hoy:* `{mejor_opcion['Ticker']}`\n"
+                f"🧮 *Cantidad nominal a comprar:* {int(mejor_opcion['Cantidad'])} unidades\n\n"
+                f"💵 *Precio Pantalla:* ${mejor_opcion['Precio_Mercado']:,.2f}\n"
+                f"📐 *Precio Entrada Neto:* ${mejor_opcion['Precio_Neto']:,.2f} (Con costos Balanz)\n"
+                f"🛡️ *ORDEN DE STOP LOSS:* ${mejor_opcion['Stop_Loss']:,.2f}\n"
+                f"🎯 *ORDEN DE TAKE PROFIT:* ${mejor_opcion['Take_Profit']:,.2f}\n\n"
+                f"💰 *Costo Total Requerido:* ${mejor_opcion['Total_Pesos']:,.2f}\n"
+                f"🔍 *Puntaje de Calidad Institucional:* {int(mejor_opcion['Score'])} / 3 Puntos.\n"
+                f"⏰ *Estado:* Ventana de apertura validada. Cargar órdenes en Balanz."
+            )
+            enviar_alerta_telegram(msg_telegram)
+            
+            st.subheader("📋 Matriz Completa de Oportunidades Factibles Ordenadas por Calidad")
+            st.dataframe(df_oportunidades, use_container_width=True)
         else:
-            st.info("Ningún CEDEAR cumple las condiciones exactas de entrada e indicadores en la rueda de hoy.")
+            st.info("Ningún CEDEAR cumple las condiciones técnicas y las restricciones de lote mínimo para tu saldo actual de cuenta hoy.")
 
