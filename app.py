@@ -6,7 +6,7 @@ import requests
 from datetime import datetime
 from streamlit_gsheets import GSheetsConnection
 
-# Configuración del panel de control interactivo profesional
+# Configuración del panel de control inteligente en internet
 st.set_page_config(page_title="Asistente Cuantitativo Pro", page_icon="🤖", layout="wide")
 
 st.title("🤖 Asistente de Trading de CEDEARs con Gestión de Portafolio")
@@ -29,7 +29,10 @@ def enviar_alerta_telegram(mensaje):
 # Conexión nativa de Streamlit con tu hoja de cálculo de Google
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
-    df_portafolio = conn.read(spreadsheet="Billetera_CEDEAR", ttl=0)
+    # CORRECCIÓN DE ALTA PRECISIÓN: Se vincula la hoja de forma explícita
+    df_portafolio = conn.read(spreadsheet="Billetera_CEDEARS", worksheet="Hoja 1", ttl=0)
+    # Limpiar columnas vacías por si acaso
+    df_portafolio = df_portafolio.dropna(how="all")
 except Exception:
     df_portafolio = pd.DataFrame(columns=["Ticker", "Cantidad", "PrecioCompra", "StopLoss", "TakeProfit", "FechaEntrada"])
 
@@ -49,16 +52,23 @@ with st.sidebar.form(key="formulario_balanz", clear_on_submit=True):
     
     if boton_guardar and ticker_real:
         nueva_fila = pd.DataFrame([{
-            "Ticker": ticker_real, "Cantidad": cant_real, "PrecioCompra": precio_real,
-            "StopLoss": sl_real, "TakeProfit": tp_real, "FechaEntrada": datetime.now().strftime('%Y-%m-%d')
+            "Ticker": ticker_real, "Cantidad": int(cant_real), "PrecioCompra": float(precio_real),
+            "StopLoss": float(sl_real), "TakeProfit": float(tp_real), "FechaEntrada": datetime.now().strftime('%Y-%m-%d')
         }])
-        df_actualizado = pd.concat([df_portafolio, nueva_fila], ignore_index=True)
+        
+        # Combinar datos cuidando que no explote si la hoja estaba vacía
+        if df_portafolio is None or df_portafolio.empty:
+            df_actualizado = nueva_fila
+        else:
+            df_actualizado = pd.concat([df_portafolio, nueva_fila], ignore_index=True)
+            
         try:
-            conn.update(spreadsheet="Billetera_CEDEAR", data=df_actualizado)
+            # CORRECCIÓN DE ALTA PRECISIÓN: Se actualiza declarando la pestaña destino
+            conn.update(spreadsheet="Billetera_CEDEARS", worksheet="Hoja 1", data=df_actualizado)
             st.sidebar.success(f"¡{ticker_real} guardado con éxito! El bot comenzará a vigilarlo.")
             st.rerun()
         except Exception as e:
-            st.sidebar.error("Error al actualizar la base de datos de Google.")
+            st.sidebar.error(f"Error técnico de escritura: {e}")
 
 # Panel Principal: Visualización de tus acciones bajo vigilancia
 st.subheader("📋 Tus Posiciones Abiertas Actualmente Activas")
@@ -153,7 +163,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                 histograma_macd = (exp1 - exp2 - (exp1 - exp2).ewm(span=9, adjust=False).mean()).iloc[-1]
                 hist_anterior = (exp1 - exp2 - (exp1 - exp2).ewm(span=9, adjust=False).mean()).iloc[-2]
                 
-                es_vela_verde = precio_act > precio_ape
+                es_vela_verde = p_act = precio_act > precio_ape
                 tendencia_alcista = precio_act > ema50
                 toca_ema9 = abs(precio_min - ema9) / precio_act <= umbral
                 toca_ema50 = abs(precio_min - ema50) / precio_act <= umbral
@@ -170,7 +180,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                 if disparar:
                     precio_ent_neto = precio_act * (1 + COSTO_OPERATIVO_TOTAL)
                     sl_g = ema_ref - (2 * atr14)
-                    if sl_g >= precio_act: sl_g = precio_act * 0.97
+                    if sl_g >= precio_act: sl_g = p_act = precio_act * 0.97
                     precio_sal_sl_neto = sl_g * (1 - COSTO_OPERATIVO_TOTAL)
                     
                     dist_riesgo = (precio_ent_neto - precio_sal_sl_neto) / precio_ent_neto
@@ -198,7 +208,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
 
         if candidatos_validos:
             df_ops = pd.DataFrame(candidatos_validos).sort_values(by="Score", ascending=False).reset_index(drop=True)
-            mejor_opcion = df_ops.iloc[0]
+            mejor_opcion = df_ops.iloc
             
             st.success("🤖 ¡Análisis de Oportunidades Completado!")
             st.subheader("🎯 La Mejor Decisión Sugerida por el Cerebro Cuantitativo")
