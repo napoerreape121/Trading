@@ -10,7 +10,7 @@ st.title("📈 Scanner Automático de CEDEARs")
 st.write("Analiza las tendencias y detecta toques en las EMAs 9 y 50 en tiempo real.")
 
 tickers = [
-    'AAL.BA','ABT.BA','ACWI.BA','ADBE.BA','AMD.BA',
+     'AAL.BA','ABT.BA','ACWI.BA','ADBE.BA','AMD.BA',
     'AMZN.BA','AAPL.BA','ARM.BA','ARKK.BA','ASML.BA',
     'AXP.BA','BAC.BA','BA.BA','BABA.BA','BKNG.BA',
     'BP.BA','BRKB.BA','BX.BA','C.BA','CAT.BA',
@@ -27,6 +27,7 @@ tickers = [
     'TGT.BA','TSLA.BA','TSM.BA','TXN.BA','UAL.BA',
     'UBER.BA','UNH.BA','V.BA','VZ.BA','WFC.BA',
     'WMT.BA','XOM.BA'
+
 ]
 
 umbral = st.slider("Sensibilidad de toque en EMA (ej: 0.5% = 0.005)", 0.001, 0.020, 0.005, step=0.001)
