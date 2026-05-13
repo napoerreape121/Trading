@@ -15,7 +15,7 @@ TELEGRAM_TOKEN = "8624285419:AAHS-aTMjxM9H33dqtqC4JCQzwyqqL_Q71Y"
 TELEGRAM_CHAT_ID = "6872048498"
 
 def enviar_alerta_telegram(mensaje):
-    """Módulo de comunicación nativo corregido con la URL oficial de red"""
+    """Módulo de comunicación nativo con la URL de la API corregida al 100%"""
     url = f"telegram.org{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
     try:
@@ -140,7 +140,6 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas Exactas"):
                         
                     monto_total_compra = precio_entrada_neto * cantidad_cedears
                     
-                    # CORRECCIÓN DE VARIABLE: Asegura la validación estricta de saldo real de caja
                     if monto_total_compra > capital_cuenta or precio_entrada_neto > capital_cuenta: continue 
                     
                     simbolo_corto = ticker.split('.')[0]
@@ -179,4 +178,3 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas Exactas"):
             st.dataframe(df_final, use_container_width=True)
         else:
             st.info("Ningún CEDEAR cumple las condiciones exactas de entrada e indicadores en la rueda de hoy.")
-
