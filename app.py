@@ -3,6 +3,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import requests
+import os
 from datetime import datetime
 
 # Configuración del panel de control inteligente en internet
@@ -25,15 +26,17 @@ def enviar_alerta_telegram(mensaje):
     except Exception:
         return False
 
-# Inicializar almacenamiento local seguro e inmune a bloqueos
-if "billetera_local" not in st.session_state:
-    st.session_state.billetera_local = []
+# BASE DE DATOS LOCAL PERMANENTE: Inicializar o leer el archivo portafolio.csv en el disco duro
+ARCHIVO_DB = "portafolio.csv"
 
-df_portafolio = pd.DataFrame(st.session_state.billetera_local)
-if df_portafolio.empty:
-    df_portafolio = pd.DataFrame(columns=["Ticker", "Cantidad", "PrecioCompra", "StopLoss", "TakeProfit", "FechaEntrada"])
+if not os.path.exists(ARCHIVO_DB):
+    df_inicial = pd.DataFrame(columns=["Ticker", "Cantidad", "PrecioCompra", "StopLoss", "TakeProfit", "FechaEntrada"])
+    df_inicial.to_csv(ARCHIVO_DB, index=False)
 
-# MÓDULO lateral: Carga de Operaciones Reales Blindada
+# Leer los datos guardados físicamente en el servidor
+df_portafolio = pd.read_csv(ARCHIVO_DB)
+
+# MÓDULO lateral: Carga de Operaciones Reales con Guardado Permanente
 st.sidebar.header("📥 Registrar Compra Real en Balanz")
 with st.sidebar.form(key="formulario_balanz", clear_on_submit=True):
     ticker_real = st.text_input("Ticker del CEDEAR (Ej: AAPL)").upper().strip()
@@ -45,36 +48,33 @@ with st.sidebar.form(key="formulario_balanz", clear_on_submit=True):
     sl_real = st.number_input("Stop Loss fijado ($)", min_value=0.0, value=900.0, step=100.0)
     tp_real = st.number_input("Take Profit fijado ($)", min_value=0.0, value=1200.0, step=100.0)
     
-    boton_guardar = st.form_submit_button(label="💾 Guardar en Portafolio")
+    boton_guardar = st.form_submit_button(label="💾 Guardar de Forma Permanente")
     
     if boton_guardar and ticker_real:
-        nueva_posicion = {
+        nueva_posicion = pd.DataFrame([{
             "Ticker": ticker_real, "Cantidad": int(cant_real), "PrecioCompra": float(precio_real),
             "StopLoss": float(sl_real), "TakeProfit": float(tp_real), "FechaEntrada": datetime.now().strftime('%Y-%m-%d')
-        }
-        st.session_state.billetera_local.append(nueva_posicion)
-        st.sidebar.success(f"¡{ticker_real} guardado en memoria!")
+        }])
+        
+        # Guardar físicamente el registro en el archivo local para que sea inmune a reinicios
+        df_actualizado = pd.concat([df_portafolio, nueva_posicion], ignore_index=True)
+        df_actualizado.to_csv(ARCHIVO_DB, index=False)
+        st.sidebar.success(f"¡{ticker_real} grabado en el disco duro con éxito!")
         st.rerun()
 
-# PANEL PRINCIPAL: Visualización de tus acciones bajo vigilancia
+# PANEL PRINCIPAL: Visualización de tus acciones bajo vigilancia permanente
 st.subheader("📋 Tus Posiciones Abiertas Actualmente Activas")
 if not df_portafolio.empty:
     st.dataframe(df_portafolio, use_container_width=True)
     
-    csv = df_portafolio.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="📥 Descargar Portafolio Actual (Respaldar en Excel/CSV)",
-        data=csv,
-        file_name="billetera_balanz.csv",
-        mime="text/csv",
-    )
-    
-    if st.button("🗑️ Vaciar todo el Portafolio (Borrar datos viejos)"):
-        st.session_state.billetera_local = []
-        st.success("¡Portafolio vaciado correctamente!")
+    # Botón de borrado total físico en el disco duro
+    if st.button("🗑️ Vaciar todo el Portafolio (Borrar Base de Datos)"):
+        df_limpio = pd.DataFrame(columns=["Ticker", "Cantidad", "PrecioCompra", "StopLoss", "TakeProfit", "FechaEntrada"])
+        df_limpio.to_csv(ARCHIVO_DB, index=False)
+        st.success("¡Base de datos limpiada correctamente!")
         st.rerun()
 else:
-    st.info("No tienes operaciones cargadas. El portafolio de vigilancia está vacío.")
+    st.info("No tienes operaciones cargadas. El portafolio de vigilancia permanente está vacío.")
 
 # Resto del listado de tus 80 CEDEARs para escaneo de compras
 tickers_escaner = [
@@ -96,7 +96,7 @@ umbral = st.sidebar.slider("Tolerancia de proximidad EMA", 0.001, 0.015, 0.005, 
 COSTO_OPERATIVO_TOTAL = (0.0050 + 0.0005) * 1.21 
 
 if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
-    # PARTE 1: ESCANEAR SALIDAS CRÍTICAS DE TUS COMPRAS REALES
+    # PARTE 1: ESCANEAR SALIDAS CRÍTICAS DE TUS COMPRAS REALES EN EL DISCO DURO
     if not df_portafolio.empty:
         st.write("🔍 Verificando estado de tus acciones en cartera...")
         tickers_cartera = df_portafolio["Ticker"].unique().tolist()
@@ -178,7 +178,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                 if disparar:
                     precio_ent_neto = precio_act * (1 + COSTO_OPERATIVO_TOTAL)
                     sl_g = ema_ref - (2 * atr14)
-                    if sl_g >= precio_act: sl_g = precio_act * 0.97
+                    if sl_g >= p_compra_min := precio_act * 0.97: sl_g = precio_act * 0.97
                     precio_sal_sl_neto = sl_g * (1 - COSTO_OPERATIVO_TOTAL)
                     
                     dist_riesgo = (precio_ent_neto - precio_sal_sl_neto) / precio_ent_neto
@@ -197,7 +197,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                     if tendencia_alcista: score += 1
                     
                     candidatos_validos.append({
-                        "Ticker": ticker.split('.')[0], "Precio": precio_act, "Neto": precio_ent_neto,
+                        "Ticker": ticker, "Precio": precio_act, "Neto": precio_ent_neto,
                         "StopLoss": sl_g, "TakeProfit": precio_tp, "Cantidad": cant_cedears,
                         "Total": monto_compra, "Score": score
                     })
@@ -206,9 +206,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
 
         if candidatos_validos:
             df_ops = pd.DataFrame(candidatos_validos).sort_values(by="Score", ascending=False).reset_index(drop=True)
-            
-            # CORRECCIÓN EXIGIDA: Agregados los corchetes [0] para indexar la primera fila real
-            mejor_opcion = df_ops.iloc[0]
+            mejor_opcion = df_ops.iloc[0] # Corrección estricta de índice de fila unificada
             
             st.success("🤖 ¡Análisis de Oportunidades Completado!")
             st.subheader("🎯 La Mejor Decisión Sugerida por el Cerebro Cuantitativo")
