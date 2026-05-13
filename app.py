@@ -43,7 +43,7 @@ with st.sidebar.form(key="formulario_balanz", clear_on_submit=True):
     cant_real = st.number_input("Cantidad de nominales comprados", min_value=1, value=1, step=1)
     precio_real = st.number_input("Precio de compra por unidad ($)", min_value=1.0, value=1000.0, step=100.0)
     sl_real = st.number_input("Stop Loss fijado ($)", min_value=0.0, value=900.0, step=100.0)
-    tp_real = st.number_input("Take Profit fixed ($)", min_value=0.0, value=1200.0, step=100.0)
+    tp_real = st.number_input("Take Profit fijado ($)", min_value=0.0, value=1200.0, step=100.0)
     
     boton_guardar = st.form_submit_button(label="💾 Guardar en Portafolio")
     
@@ -61,7 +61,6 @@ st.subheader("📋 Tus Posiciones Abiertas Actualmente Activas")
 if not df_portafolio.empty:
     st.dataframe(df_portafolio, use_container_width=True)
     
-    # NUEVA HERRAMIENTA 1: Botón para exportar el archivo limpio a tu PC
     csv = df_portafolio.to_csv(index=False).encode('utf-8')
     st.download_button(
         label="📥 Descargar Portafolio Actual (Respaldar en Excel/CSV)",
@@ -70,7 +69,6 @@ if not df_portafolio.empty:
         mime="text/csv",
     )
     
-    # NUEVA HERRAMIENTA 2: Botón de borrado total de la memoria
     if st.button("🗑️ Vaciar todo el Portafolio (Borrar datos viejos)"):
         st.session_state.billetera_local = []
         st.success("¡Portafolio vaciado correctamente!")
@@ -135,7 +133,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                 if not df_portafolio.empty and ticker in df_portafolio["Ticker"].values: continue
                 
                 df_t = pd.DataFrame()
-                df_t['Close'] = datos_market_close = datos_mercado['Close'][ticker].dropna()
+                df_t['Close'] = datos_mercado['Close'][ticker].dropna()
                 df_t['Open'] = datos_mercado['Open'][ticker].dropna()
                 df_t['Low'] = datos_mercado['Low'][ticker].dropna()
                 df_t['High'] = datos_mercado['High'][ticker].dropna()
@@ -199,7 +197,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                     if tendencia_alcista: score += 1
                     
                     candidatos_validos.append({
-                        "Ticker": ticker, "Precio": precio_act, "Neto": precio_ent_neto,
+                        "Ticker": ticker.split('.')[0], "Precio": precio_act, "Neto": precio_ent_neto,
                         "StopLoss": sl_g, "TakeProfit": precio_tp, "Cantidad": cant_cedears,
                         "Total": monto_compra, "Score": score
                     })
@@ -208,7 +206,9 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
 
         if candidatos_validos:
             df_ops = pd.DataFrame(candidatos_validos).sort_values(by="Score", ascending=False).reset_index(drop=True)
-            mejor_opcion = df_ops.iloc
+            
+            # CORRECCIÓN EXIGIDA: Agregados los corchetes [0] para indexar la primera fila real
+            mejor_opcion = df_ops.iloc[0]
             
             st.success("🤖 ¡Análisis de Oportunidades Completado!")
             st.subheader("🎯 La Mejor Decisión Sugerida por el Cerebro Cuantitativo")
@@ -232,4 +232,5 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
             st.dataframe(df_ops, use_container_width=True)
         else:
             st.info("Ningún CEDEAR reúne las condiciones técnicas en la rueda en vivo de hoy.")
+
 
