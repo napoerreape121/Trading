@@ -4,7 +4,6 @@ import pandas as pd
 import numpy as np
 import requests
 from datetime import datetime
-from streamlit_gsheets import GSheetsConnection
 
 # Configuración del panel de control inteligente en internet
 st.set_page_config(page_title="Asistente Cuantitativo Pro", page_icon="🤖", layout="wide")
@@ -26,16 +25,9 @@ def enviar_alerta_telegram(mensaje):
     except Exception:
         return False
 
-# Inicializar almacenamiento local seguro e inmune a bloqueos de Google
+# Inicializar almacenamiento local seguro e inmune a bloqueos
 if "billetera_local" not in st.session_state:
-    try:
-        # Intentamos leer tu Google Sheets en modo lectura (que sí está permitido de forma pública)
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        df_inicial = conn.read(spreadsheet="Billetera_CEDEARS", worksheet="Hoja 1", ttl=0)
-        df_inicial = df_inicial.dropna(how="all")
-        st.session_state.billetera_local = df_inicial.to_dict('records')
-    except Exception:
-        st.session_state.billetera_local = []
+    st.session_state.billetera_local = []
 
 df_portafolio = pd.DataFrame(st.session_state.billetera_local)
 if df_portafolio.empty:
@@ -51,7 +43,7 @@ with st.sidebar.form(key="formulario_balanz", clear_on_submit=True):
     cant_real = st.number_input("Cantidad de nominales comprados", min_value=1, value=1, step=1)
     precio_real = st.number_input("Precio de compra por unidad ($)", min_value=1.0, value=1000.0, step=100.0)
     sl_real = st.number_input("Stop Loss fijado ($)", min_value=0.0, value=900.0, step=100.0)
-    tp_real = st.number_input("Take Profit fijado ($)", min_value=0.0, value=1200.0, step=100.0)
+    tp_real = st.number_input("Take Profit fixed ($)", min_value=0.0, value=1200.0, step=100.0)
     
     boton_guardar = st.form_submit_button(label="💾 Guardar en Portafolio")
     
@@ -61,13 +53,28 @@ with st.sidebar.form(key="formulario_balanz", clear_on_submit=True):
             "StopLoss": float(sl_real), "TakeProfit": float(tp_real), "FechaEntrada": datetime.now().strftime('%Y-%m-%d')
         }
         st.session_state.billetera_local.append(nueva_posicion)
-        st.sidebar.success(f"¡{ticker_real} guardado en memoria! El bot lo vigila en vivo.")
+        st.sidebar.success(f"¡{ticker_real} guardado en memoria!")
         st.rerun()
 
-# Panel Principal: Visualización de tus acciones bajo vigilancia
+# PANEL PRINCIPAL: Visualización de tus acciones bajo vigilancia
 st.subheader("📋 Tus Posiciones Abiertas Actualmente Activas")
 if not df_portafolio.empty:
     st.dataframe(df_portafolio, use_container_width=True)
+    
+    # NUEVA HERRAMIENTA 1: Botón para exportar el archivo limpio a tu PC
+    csv = df_portafolio.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="📥 Descargar Portafolio Actual (Respaldar en Excel/CSV)",
+        data=csv,
+        file_name="billetera_balanz.csv",
+        mime="text/csv",
+    )
+    
+    # NUEVA HERRAMIENTA 2: Botón de borrado total de la memoria
+    if st.button("🗑️ Vaciar todo el Portafolio (Borrar datos viejos)"):
+        st.session_state.billetera_local = []
+        st.success("¡Portafolio vaciado correctamente!")
+        st.rerun()
 else:
     st.info("No tienes operaciones cargadas. El portafolio de vigilancia está vacío.")
 
@@ -128,7 +135,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                 if not df_portafolio.empty and ticker in df_portafolio["Ticker"].values: continue
                 
                 df_t = pd.DataFrame()
-                df_t['Close'] = datos_mercado['Close'][ticker].dropna()
+                df_t['Close'] = datos_market_close = datos_mercado['Close'][ticker].dropna()
                 df_t['Open'] = datos_mercado['Open'][ticker].dropna()
                 df_t['Low'] = datos_mercado['Low'][ticker].dropna()
                 df_t['High'] = datos_mercado['High'][ticker].dropna()
@@ -225,3 +232,4 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
             st.dataframe(df_ops, use_container_width=True)
         else:
             st.info("Ningún CEDEAR reúne las condiciones técnicas en la rueda en vivo de hoy.")
+
