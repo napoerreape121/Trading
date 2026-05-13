@@ -16,7 +16,7 @@ TELEGRAM_CHAT_ID = "6872048498"
 
 def enviar_alerta_telegram(mensaje):
     """Módulo de comunicación nativo con la URL oficial de la API de Telegram corregida al 100%"""
-    url = f"telegram.org{TELEGRAM_TOKEN}/sendMessage"
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
     try:
         r = requests.post(url, json=payload, timeout=10)
@@ -82,7 +82,7 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas Exactas"):
                 df_ticker['Close'] = datos_mercado['Close'][ticker].dropna()
                 df_ticker['Open'] = datos_mercado['Open'][ticker].dropna()
                 df_ticker['Low'] = datos_mercado['Low'][ticker].dropna()
-                df_ticker['High'] = datos_market_high = datos_mercado['High'][ticker].dropna()
+                df_ticker['High'] = datos_mercado['High'][ticker].dropna()
                 
                 if len(df_ticker) < 50: continue
                 
@@ -142,7 +142,7 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas Exactas"):
                     
                     if monto_total_compra > capital_cuenta or precio_entrada_neto > capital_cuenta: continue 
                     
-                    simbolo_corto = str(ticker.split('.'))
+                    simbolo_corto = str(ticker.split('.')[0])
                     
                     ordenes_del_dia.append({
                         "CEDEAR": simbolo_corto,
@@ -178,3 +178,4 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas Exactas"):
             st.dataframe(df_final, use_container_width=True)
         else:
             st.info("Ningún CEDEAR cumple las condiciones exactas de entrada e indicadores en la rueda de hoy.")
+
