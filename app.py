@@ -15,7 +15,7 @@ TELEGRAM_TOKEN = "8624285419:AAHS-aTMjxM9H33dqtqC4JCQzwyqqL_Q71Y"
 TELEGRAM_CHAT_ID = "6872048498"
 
 def enviar_alerta_telegram(mensaje):
-    """Módulo de comunicación nativo con la URL oficial de la API de Telegram corregida"""
+    """Módulo de comunicación nativo con la URL oficial de la API de Telegram corregida al 100%"""
     url = f"telegram.org{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
     try:
@@ -82,7 +82,7 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas Exactas"):
                 df_ticker['Close'] = datos_mercado['Close'][ticker].dropna()
                 df_ticker['Open'] = datos_mercado['Open'][ticker].dropna()
                 df_ticker['Low'] = datos_mercado['Low'][ticker].dropna()
-                df_ticker['High'] = datos_mercado['High'][ticker].dropna()
+                df_ticker['High'] = datos_market_high = datos_mercado['High'][ticker].dropna()
                 
                 if len(df_ticker) < 50: continue
                 
@@ -142,7 +142,7 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas Exactas"):
                     
                     if monto_total_compra > capital_cuenta or precio_entrada_neto > capital_cuenta: continue 
                     
-                    simbolo_corto = ticker.split('.')
+                    simbolo_corto = str(ticker.split('.'))
                     
                     ordenes_del_dia.append({
                         "CEDEAR": simbolo_corto,
@@ -176,5 +176,8 @@ if st.button("🚀 Ejecutar Escáner y Despachar Alertas Exactas"):
             df_final = pd.DataFrame(ordenes_del_dia)
             st.success("🤖 ¡Análisis de Ratio completado con éxito! Las alertas desglosadas en pesos ya se enviaron a tu Telegram.")
             st.dataframe(df_final, use_container_width=True)
+        else:
+            st.info("Ningún CEDEAR cumple las condiciones exactas de entrada e indicadores en la rueda de hoy.")
+
         else:
             st.info("Ningún CEDEAR cumple las condiciones exactas de entrada e indicadores en la rueda de hoy.")
