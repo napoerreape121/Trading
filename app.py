@@ -1,72 +1,70 @@
 import yfinance as yf
 import pandas as pd
-import ta
-import streamlit as st
+import numpy as np
 
-# Lista completa de CEDEARs (extraída del PDF)
+# Lista completa de CEDEARs extraída de tu archivo pruebaaaa.py
 tickers = [
-    "AAL","AALC","AALD","AAP","AAPC","AAPD","AAPL","AAPLC","AAPLD","ABBV","ABBVC","ABBVD",
-    "ABEV","ABEV3","ABEVC","ABEVD","ABNB","ABNBC","ABNBD","ABT","ABTC","ABTD","ACN","ACNC","ACND",
-    "ACWI","ACWIC","ACWID","ADBE","ADBEC","ADBED","ADGO","ADGOC","ADGOD","ADI","ADID","ADP","ADS",
-    "ADSC","ADSD","AEG","AEM","AEMC","AEMD","AI","AIC","AID","AIG","AIGC","AIGD","AKO.B","ALAB",
-    "ALAC","ALAD","AMAT","AMATC","AMATD","AMD","AMDC","AMDD","AMGN","AMGNC","AMGND","AMX","AMXC",
-    "AMXD","AMZN","AMZNC","AMZND","ANF","ANFC","ANFD","ARCO","ARCOC","ARCOD","ARKK","ARKKC","ARKKD",
-    "ARM","ARMD","ASML","ASMLC","ASMLD","ASR","ASTS","ASTSC","ASTSD","AVGO","AVGOC","AVGOD","AVY",
-    "AVYC","AVYD","AXIA","AXIAC","AXIAD","AXP","AXPC","AXPD","AZN","AZNC","AZND","B","B.C","B.D",
-    "BA","BA.C","BA.CC","BA.CD","BABA","BABAC","BABAD","BAC","BAD","BAK","BAKC","BAKD","BAS","BAYN",
-    "BB","BBA3C","BBA3D","BBAS3","BBD","BBDC3","BBDCC","BBDCD","BBDD","BBV","BBVD","BCS","BHP","BHPD",
-    "BIDU","BIDUC","BIDUD","BIIB","BIIBC","BIIBD","BIOX","BIOXC","BIOXD","BITF","BITFC","BITFD","BK",
-    "BKC","BKD","BKNG","BKNGC","BKNGD","BKR","BKRC","BKRD","BMNR","BMNRC","BMNRD","BMY","BNG","BNGC",
-    "BNGD","BP","BPA11","BPA1C","BPA1D","BPC","BPD","BRKB","BRKBC","BRKBD","BSBR","BX","BXC","BXD",
-    "C","C.D","CAAP","CAAPC","CAAPD","CAH","CAHC","CAHD","CAR","CAR.C","CAR.D","CAT","CATC","CATD",
-    "CC","CCL","CCLC","CCLD","CDE","CEG","CEGC","CEGD","CIBR","CIBRC","CIBRD","CL","CLC","CLD","CLS",
-    "CLSC","CLSD","COIN","COINC","COIND","COPX","COPXC","COPXD","COST","COSTC","COSTD","CRM","CRMC",
-    "CRMD","CRWV","CRWVC","CRWVD","CSCO","CSCOC","CSCOD","CSNA3","CSNAC","CSNAD","CVS","CVSC","CVSD",
-    "CVX","CVXC","CVXD","CX","DAL","DALC","DALD","DD","DE","DEC","DECK","DECKC","DECKD","DED","DEO",
-    "DEOC","DEOD","DHR","DHRC","DHRD","DIA","DIAC","DIAD","DISN","DISNC","DISND","DJN3C","DJN3D",
-    "DJNJ3","DOCU","DOCUC","DOCUD","DOW","DOWC","DOWD","E","EA","EAC","EAD","EBAY","EBAYC","EBAYD",
-    "EC","ECL","ECLC","ECLD","EEM","EEMC","EEMD","EFA","EFAC","EFAD","EFX","EFXC","EFXD","ELP","ELPC",
-    "ELPCC","ELPCD","ELPD","EMBJ","EMBJC","EMBJD","EOAN","EOANC","EQNR","EQNRC","EQNRD","ERIC","ESGU",
-    "ESGUC","ESGUD","ETHA","ETHAC","ETHAD","ETSY","ETSYC","ETSYD","EWJ","EWJC","EWJD","EWY"
+    'BP.BA', 'BRKB.BA', 'BX.BA', 'C.BA', 'CAT.BA',
+    'CCL.BA', 'COPX.BA', 'COIN.BA', 'COST.BA', 'CRM.BA',
+    'CVS.BA', 'CVX.BA', 'DAL.BA', 'DE.BA', 'DISN.BA',
+    'DIA.BA', 'EFA.BA', 'ETHA.BA', 'GE.BA', 'GOOGL.BA',
+    'GS.BA', 'HD.BA', 'HON.BA', 'IBM.BA', 'INTC.BA',
+    'JNJ.BA', 'JPM.BA', 'KO.BA', 'LLY.BA', 'MA.BA',
+    'MCD.BA', 'META.BA', 'MELI.BA', 'MMM.BA', 'MSFT.BA',
+    'NFLX.BA', 'NKE.BA', 'NVDA.BA', 'ORCL.BA', 'PANW.BA',
+    'PEP.BA', 'PFE.BA', 'PG.BA', 'PYPL.BA', 'QCOM.BA',
+    'QQQ.BA', 'ROKU.BA', 'SHOP.BA', 'SNOW.BA',
+    'SONY.BA', 'SPY.BA', 'T.BA', 'TEAM.BA',
+    'TGT.BA', 'TSLA.BA', 'TSM.BA', 'TXN.BA', 'UAL.BA',
+    'UBER.BA', 'UNH.BA', 'V.BA', 'VZ.BA', 'WFC.BA', 'WMT.BA'
 ]
 
-def scanner(ticker):
-    data = yf.download(ticker, period="6mo", interval="1d").dropna()
-    if data.empty or "Close" not in data.columns or len(data) < 2:
-        return None
-    
+print(f"{'CEDEAR':<8} | {'PRECIO':<9} | {'TENDENCIA':<9} | MENSAJE")
+print("-" * 60)
+
+# Descargamos los datos de todos los activos juntos para optimizar tiempo y velocidad
+# Requerimos 3 meses de historial para que el cálculo de la EMA 50 sea preciso
+datos_mercado = yf.download(tickers, period="3mo", interval="1d", progress=False)
+
+for ticker in tickers:
     try:
-        data["EMA9"] = ta.trend.EMAIndicator(data["Close"], window=9).ema_indicator()
-        data["EMA50"] = ta.trend.EMAIndicator(data["Close"], window=50).ema_indicator()
+        # Extraer historial de cierre para el ticker actual eliminando valores nulos
+        historial_cierre = datos_mercado['Close'][ticker].dropna()
+        if len(historial_cierre) < 50:
+            continue
+            
+        precio_actual = float(historial_cierre.iloc[-1])
+        
+        # Cálculo matemático exacto de EMA 9 y EMA 50
+        ema9 = historial_cierre.ewm(span=9, adjust=False).mean().iloc[-1]
+        ema50 = historial_cierre.ewm(span=50, adjust=False).mean().iloc[-1]
+        
+        # Determinar tendencia en base a la EMA de largo plazo (50)
+        tendencia = "ALCISTA" if precio_actual > ema50 else "BAJISTA"
+        
+        # Umbral de tolerancia de toque (0.5% de cercanía entre el precio y la EMA)
+        # Puedes modificar este valor (ej: 0.003 para 0.3%) si deseas más o menos sensibilidad
+        umbral = 0.005 
+        
+        toca_ema9 = abs(precio_actual - ema9) / precio_actual <= umbral
+        toca_ema50 = abs(precio_actual - ema50) / precio_actual <= umbral
+        
+        # SOLUCIÓN AL PROBLEMA: Evaluamos de forma independiente sin usar 'elif'
+        mensajes_alerta = []
+        if toca_ema9:
+            mensajes_alerta.append("TOCA EMA 9")
+        if toca_ema50:
+            mensajes_alerta.append("TOCA EMA 50")
+            
+        # Si cumple cualquiera de los dos toques, se imprime en la tabla filtrada
+        if mensajes_alerta:
+            simbolo_corto = ticker.split('.')[0]
+            mensaje_pantalla = " y ".join(mensajes_alerta)
+            print(f"{simbolo_corto:<8} | {precio_actual:<9.2f} | {tendencia:<9} | 🟩 {mensaje_pantalla}")
+            
     except Exception:
-        return None
-    
-    last, prev = data.iloc[-1], data.iloc[-2]
-    tendencia_bajista = last["EMA9"] < last["EMA50"]
-    tendencia_alcista = last["EMA9"] > last["EMA50"]
-    vela_verde = last["Close"] > last["Open"]
-    toca_ema9 = abs(last["Close"] - last["EMA9"]) / last["EMA9"] < 0.005
-    toca_ema50 = abs(last["Close"] - last["EMA50"]) / last["EMA50"] < 0.005
+        # Si un ticker falla temporalmente en Yahoo Finance, el script continúa con el siguiente
+        continue
 
-    if tendencia_bajista and vela_verde and toca_ema9:
-        return f"{ticker}: Señal en tendencia bajista tocando EMA9"
-    elif tendencia_alcista and vela_verde and (toca_ema9 or toca_ema50):
-        return f"{ticker}: Señal en tendencia alcista tocando EMA9/EMA50"
-    return None
-
-# Interfaz Streamlit
-st.title("Scanner de CEDEARs con EMA")
-
-resultados = []
-for t in tickers:
-    señal = scanner(t)
-    if señal:
-        resultados.append(señal)
-
-if resultados:
-    st.subheader("Señales detectadas:")
-    for r in resultados:
-        st.write(r)
-else:
-    st.write("No se detectaron señales en este momento.")
-
+print("-" * 60)
+print("Análisis completado al 100%.")
