@@ -99,7 +99,6 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
         st.subheader("🕵️ Análisis Cuantitativo de tus Posiciones Abiertas")
         tickers_cartera = df_portafolio["Ticker"].unique().tolist()
         try:
-            # Descargamos historial corto para calcular EMAs y volatilidades de tus posiciones vivas
             datos_cartera = yf.download(tickers_cartera, period="6mo", interval="1d", progress=False)
             
             for idx, row in df_portafolio.iterrows():
@@ -136,24 +135,22 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                     continue
                 
                 # REGLA 2: GESTIÓN DE TRAILING STOP DINÁMICO (Asegurar Ganancia)
-                # Si el precio subió significativamente, arrastramos el stop loss por debajo de la EMA 9
                 nuevo_stop_sugerido = ema9_v - (1.5 * atr14_v)
                 if precio_vivo > float(row["PrecioCompra"]) and nuevo_stop_sugerido > float(row["StopLoss"]):
                     st.info(f"🔄 **Sugerencia para {tick.split('.')[0]}:** El activo está ganando fuerza. Considera subir tu Stop Loss en Balanz a **${nuevo_stop_sugerido:,.2f}** para blindar beneficios.")
-                    msg_trailing = f"🔄 *¡AUSTE DE SEGURIDAD (Trailing Stop)!*\n\n📈 El CEDEAR `{tick.split('.')[0]}` está avanzando a tu favor.\n🛠️ *Acción:* Sube tu Stop Loss en Balanz a `${nuevo_stop_sugerido:,.2f}` para asegurar tus ganancias si el precio se da vuelta."
+                    msg_trailing = f"🔄 *¡AJUSTE DE SEGURIDAD (Trailing Stop)!*\n\n📈 El CEDEAR `{tick.split('.')[0]}` está avanzando a tu favor.\n🛠️ *Acción:* Sube tu Stop Loss en Balanz a `${nuevo_stop_sugerido:,.2f}` para asegurar tus ganancias si el precio se da vuelta."
                     enviar_alerta_telegram(msg_trailing)
                 
-                # REGLA 3: ALERTA DE DEBILIDAD ESTRUCTURAL (Cierre Anticipado)
-                # Si el precio de cierre perfora la EMA 9, hay peligro de cambio de tendencia inmediato
-                elif precio_vivo <編ema9_v y precio_vivo > float(row["StopLoss"]):
+                # REGLA 3: ALERTA DE DEBILIDAD ESTRUCTURAL CORREGIDA
+                elif precio_vivo < ema9_v and precio_vivo > float(row["StopLoss"]):
                     st.warning(f"⚠️ **Advertencia para {tick.split('.')[0]}:** El precio cerró por debajo de la EMA 9. La estructura de corto plazo muestra debilidad técnica.")
-                    msg_debilidad = f"⚠️ *¡ADVERTENCIA DE DEBILIDAD TÉCNICA!*\n\n📉 El CEDEAR `{tick.split('.')[0]}` cerró por debajo de la EMA 9 (${precio_vivo:,.2f}).\n🛒 *Acción Sugerida:* Evalúa cerrar la posición de forma anticipada en Balanz para proteger tu capital antes de que busque el Stop Loss mayor."
+                    msg_debilidad = f"⚠️ *¡ADVERTENCIA DE DEBILIDAD TÉCNICA!*\n\n📉 El CEDEAR `{tick.split('.')[0]}` cerró por debajo de la EMA 9 (${precio_vivo:,.2f}).\n🛒 *Acción Sugerida:* Evalúa cerrar la posición de forma anticipada en Balanz para proteger tu capital."
                     enviar_alerta_telegram(msg_debilidad)
                     
         except Exception as e:
             st.warning(f"No se pudo auditar dinámicamente tu portafolio: {e}. Continuando con el escáner...")
 
-    # PARTE 2: BUSCAR NUEVAS COMPRAS INTELIGENTES EN EL MERCADO EN VIVO
+    # PARTE 2: BUSCAR NUEVAS COMPRAS INTELIGENTES
     with st.spinner("Buscando las mejores oportunidades según tu capital disponible hoy..."):
         try:
             datos_mercado = yf.download(tickers_escaner, period="6mo", interval="1d", progress=False)
@@ -232,7 +229,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                     if tendencia_alcista: score += 1
                     
                     candidatos_validos.append({
-                        "Ticker": ticker.split('.')[0], "Precio": precio_act, "Neto": precio_ent_neto,
+                        "Ticker": ticker, "Precio": precio_act, "Neto": precio_ent_neto,
                         "StopLoss": sl_g, "TakeProfit": precio_tp, "Cantidad": cant_cedears,
                         "Total": monto_compra, "Score": score
                     })
