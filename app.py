@@ -16,7 +16,7 @@ st.set_page_config(
 )
 
 st.title("🤖 Asistente de Trading de CEDEARs con Gestión Activa de Portafolio")
-st.write("Monitoreo Dinámico: Lógica matemática estricta para mitigar falsas señales y proteger el Triángulo de Hierro (Riesgo máximo 2%).")
+st.write("Monitoreo Dinámico: Lógica de ruptura y cruce (Crossover) basada en TradingView. Riesgo máximo por operación: 2% del patrimonio.")
 
 # Credenciales de Telegram
 TELEGRAM_TOKEN = "8624285419:AAHS-aTMjxM9H33dqtqC4JCQzwyqqL_Q71Y"
@@ -24,7 +24,7 @@ TELEGRAM_CHAT_ID = "6872048498"
 
 def enviar_alerta_telegram(mensaje):
     """Módulo oficial de comunicación en red con la API de Telegram"""
-    url = f"telegram.org{TELEGRAM_TOKEN}/sendMessage"
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
     try:
         r = requests.post(url, json=payload, timeout=10)
@@ -83,7 +83,7 @@ if not df_portafolio.empty:
 else:
     st.info("No tienes operaciones cargadas en el archivo permanente.")
 
-# Universo de Tickers
+# Universo de Tickers de CEDEARs
 tickers_escaner = [
     'AAL.BA','ABT.BA','ACWI.BA','ADBE.BA','AMD.BA','AMZN.BA','AAPL.BA','ARM.BA','ARKK.BA','ASML.BA',
     'AXP.BA','BAC.BA','BA.BA','BABA.BA','BKNG.BA','BP.BA','BRKB.BA','BX.BA','C.BA','CAT.BA',
@@ -103,7 +103,7 @@ umbral = st.sidebar.slider("Tolerancia de proximidad EMA", 0.001, 0.015, 0.005, 
 COSTO_OPERATIVO_TOTAL = (0.0050 + 0.0005) * 1.21 
 
 # =====================================================================
-# 🚀 MOTOR CUANTITATIVO: MONITOREO Y ESCÁNER ESTRICTO
+# 🚀 MOTOR CUANTITATIVO: MONITOREO Y ESCÁNER DE CAPTURA DE PANTALLA
 # =====================================================================
 if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
     
@@ -159,8 +159,8 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
         except Exception as e:
             st.warning(f"No se pudo auditar dinámicamente tu portafolio: {e}")
 
-    # PARTE 2: BUSCAR NUEVAS COMPRAS (CEREBRO CORREGIDO DE RAÍZ CON MEJORAS DE PRECISIÓN)
-    with st.spinner("Buscando oportunidades reales bajo tus reglas estrictas..."):
+    # PARTE 2: BUSCAR NUEVAS COMPRAS (LÓGICA DEL CRUCE EXACTO DE TU IMAGEN)
+    with st.spinner("Buscando rupturas institucionales en base a tu gráfico..."):
         try:
             datos_mercado = yf.download(tickers_escaner, period="6mo", interval="1d", progress=False)
         except Exception:
@@ -184,14 +184,14 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                     c1, o1, l1, h1 = float(df_t['Close'].iloc[-2]), float(df_t['Open'].iloc[-2]), float(df_t['Low'].iloc[-2]), float(df_t['High'].iloc[-2])
                     c2, o2, l2, h2 = float(df_t['Close'].iloc[-3]), float(df_t['Open'].iloc[-3]), float(df_t['Low'].iloc[-3]), float(df_t['High'].iloc[-3])
                     
-                    # FILTRO DE VOLUMEN ABSOLUTO Y RELATIVO (Evita trampas de liquidez)
+                    # FILTROS INSTITUCIONALES DE PRECISIÓN (Volumen + Liquidez)
                     volumen_nominal_ars = v0 * c0
                     volumen_promedio_10d = df_t['Volume'].rolling(10).mean().iloc[-1]
                     
-                    tiene_liquidez_minima = volumen_nominal_ars > 8000000  # Mínimo $8 millones operados en el día
-                    volumen_institucional = v0 > (volumen_promedio_10d * 1.15) # 15% arriba del volumen promedio
+                    tiene_liquidez_minima = volumen_nominal_ars > 8000000  # Mínimo $8 millones en ARS
+                    volumen_institucional = v0 > (volumen_promedio_10d * 1.15) # +15% de volumen (Muestra las barras altas de tu imagen)
                     
-                    # Medias Móviles y ATR
+                    # Medias Móviles y ATR de Volatilidad
                     ema9 = df_t['Close'].ewm(span=9, adjust=False).mean().iloc[-1]
                     ema50 = df_t['Close'].ewm(span=50, adjust=False).mean().iloc[-1]
                     
@@ -201,7 +201,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                     true_range = pd.concat([high_low, high_close_prev, low_close_prev], axis=1).max(axis=1)
                     atr14 = true_range.rolling(14).mean().iloc[-1]
                     
-                    # RSI estricto
+                    # RSI anti sobrecompra
                     delta = df_t['Close'].diff()
                     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
                     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
@@ -216,26 +216,28 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                     macd_hoy, senal_hoy = linea_macd.iloc[-1], linea_senal.iloc[-1]
                     macd_ayer, senal_ayer = linea_macd.iloc[-2], linea_senal.iloc[-2]
                     
-                    # REGLAS REQUERIDAS POR EL USUARIO
                     es_vela_verde = c0 > o0
                     rsi_no_sobrecomprado = rsi14 < 65
                     
                     distancia_macd = abs(macd_hoy - senal_hoy) / c0
                     macd_proximo_cruce = (macd_ayer < senal_ayer and macd_hoy >= senal_hoy) or (macd_hoy < senal_hoy and distancia_macd < 0.005)
 
+                    # 📐 LÓGICA BASADA STRICTAMENTE EN TU CAPTURA (CROSSOVER DE VELAS) [1]
                     disparar = False
                     
-                    if c0 > ema50:  # TENDENCIA ALCISTA
-                        vela_sobre_ema9 = (c0 > ema9) and (o0 > ema9)
+                    # Regla fundamental: El precio nace abajo/toca la EMA y cruza para cerrar con fuerza por arriba [1]
+                    perfora_ema9_hacia_arriba = (o0 <= ema9 or l0 <= ema9) and (c0 > ema9)
+                    
+                    if c0 > ema50:  # TENDENCIA ALCISTA (Caso del Rectángulo 1) [1]
                         vela_en_ema50 = abs(l0 - ema50) / c0 <= umbral
-                        if es_vela_verde and rsi_no_sobrecomprado and (vela_sobre_ema9 or vela_en_ema50):
+                        if es_vela_verde and rsi_no_sobrecomprado and (perfora_ema9_hacia_arriba or vela_en_ema50):
                             disparar = True
-                    else:  # TENDENCIA BAJISTA
-                        vela_sobre_ema50 = c0 > ema50
-                        if es_vela_verde and rsi_no_sobrecomprado and vela_sobre_ema50:
+                    else:  # TENDENCIA BAJISTA / REVERSIÓN DE SUELO (Casos 2 y 3) [1]
+                        perfora_ema50_hacia_arriba = (o0 <= ema50 or l0 <= ema50) and (c0 > ema50)
+                        if es_vela_verde and rsi_no_sobrecomprado and (perfora_ema9_hacia_arriba or perfora_ema50_hacia_arriba):
                             disparar = True
 
-                    # VALIDACIÓN DE SUBYACENTE EN WALL STREET (Filtro Anti-Arbitrajes artificiales del CCL)
+                    # VALIDACIÓN DE SUBYACENTE EN WALL STREET (Filtro anti-movimientos falsos por dólar CCL)
                     subyacente_sano = False
                     if disparar:
                         ticker_ny = ticker.split('.')[0]
@@ -248,7 +250,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                     # FILTRADO DE ENTRADA DEFINITIVO
                     if disparar and tiene_liquidez_minima and volumen_institucional and subyacente_sano:
                         
-                        # Patrones de Velas Japonesas
+                        # Reconocimiento de Patrones de Velas Japonesas
                         score_patron = 0
                         cuerpo_abs = abs(c0 - o0)
                         rango_tot = h0 - l0 if (h0 - l0) > 0 else 0.01
@@ -304,7 +306,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                 
                 ticker_notif = mejor_opcion["Ticker"].split('.')[0]
                 msg_tg = (
-                    f"🤖 *¡SEÑAL INSTITUCIONAL DETECTADA!*\n\n"
+                    f"🤖 *¡CRUCE DE EMA DETECTADO (CONFIRMADO)!*\n\n"
                     f"🎯 *CEDEAR Seleccionado:* `{ticker_notif}`\n"
                     f"🤖 *Cantidad nominal a comprar:* {int(mejor_opcion['Cantidad'])} unidades\n\n"
                     f"💵 *Precio Pantalla:* ${mejor_opcion['Precio']:,.2f}\n"
@@ -317,7 +319,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                 enviar_alerta_telegram(msg_tg)
                 st.dataframe(df_ops, use_container_width=True)
             else:
-                st.info("Ningún CEDEAR reúne los filtros estrictos y el volumen institucional en la rueda de hoy.")
+                st.info("Ningún CEDEAR reúne las condiciones de quiebre y el volumen institucional hoy.")
 
 # =====================================================================
 # 💬 NUEVO MÓDULO: PANEL DE PREGUNTAS CON IA AVANZADA (OPENAI)
@@ -327,13 +329,13 @@ col_chat_title, col_chat_clear = st.columns([4, 1])
 
 with col_chat_title:
     st.subheader("💬 Consulta a tu Cerebro Cuantitativo con IA")
-    st.write("Hazle preguntas financieras o estratégicas sobre tus posiciones reales.")
+    st.write("Hazle preguntas financieras o estratégicas sobre tus posiciones reales o sobre tus reglas de trading.")
 
 if "historial_chat" not in st.session_state:
     st.session_state.historial_chat = []
 
 with col_chat_clear:
-    if st.button("膜 Limpiar Chat", use_container_width=True):
+    if st.button("🧹 Limpiar Chat", use_container_width=True):
         st.session_state.historial_chat = []
         st.rerun()
 
@@ -341,7 +343,7 @@ for mensaje in st.session_state.historial_chat:
     with st.chat_message(mensaje["rol"]):
         st.write(mensaje["contenido"])
 
-if pregunta_usuario := st.chat_input("Ej: ¿Qué acciones tengo en cartera y cuál es mi riesgo patrimonial hoy?"):
+if pregunta_usuario := st.chat_input("Ej: ¿Por qué el bot descartaría un activo que rompe la EMA si tiene el RSI muy alto?"):
     
     with st.chat_message("user"):
         st.write(pregunta_usuario)
@@ -368,7 +370,7 @@ if pregunta_usuario := st.chat_input("Ej: ¿Qué acciones tengo en cartera y cu�
                     f"- Riesgo máximo por operación (2% del patrimonio): ${riesgo_maximo_ars:,.2f} ARS\n"
                     f"- Ratio Recompensa/Riesgo mínimo: {ratio_beneficio}x\n"
                     f"- Parámetros de Stop Loss: Basado estrictamente en 2 ATR de volatilidad de mercado.\n"
-                    f"- Filtros añadidos: Volumen nominal > $8M, volumen institucional +15%, validación de subyacente en Wall Street y vela verde obligatoria.\n\n"
+                    f"- Filtros añadidos: Volumen nominal > $8M, volumen institucional +15%, validación de subyacente en Wall Street, vela verde obligatoria y filtro estricto de ruptura (Crossover) de la EMA 9 o EMA 50.\n\n"
                     f"Instrucciones: Respondé siempre en español con modismos de Argentina, de manera profesional, técnica y muy concisa. "
                     f"No inventes datos. Si te piden opiniones de mercado, enmarcalas bajo la estricta gestión de riesgos del 2% del usuario."
                 )
