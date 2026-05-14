@@ -17,6 +17,7 @@ TELEGRAM_CHAT_ID = "6872048498"
 
 def enviar_alerta_telegram(mensaje):
     """Módulo oficial de comunicación en red con la API de Telegram"""
+    # LÍNEA CORREGIDA CON EL ENLACE COMPLETO Y SEGURO:
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
     try:
@@ -118,7 +119,6 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
 
     # PARTE 2: BUSCAR NUEVAS COMPRAS INTELIGENTES
     with st.spinner("Buscando las mejores oportunidades según tu capital disponible hoy..."):
-        # Variable para controlar si hubo rechazos únicamente por motivos de saldo
         oportunidades_descartadas_por_capital = False
         
         try:
@@ -193,7 +193,6 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                             continue
                         monto_compra = precio_ent_neto * cant_cedears
                         
-                        # Si pasa los filtros técnicos pero NO te da el dinero, marcamos la advertencia
                         if monto_compra > capital_disponible or precio_ent_neto > capital_disponible: 
                             oportunidades_descartadas_por_capital = True
                             continue
@@ -210,6 +209,13 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                         })
                 except Exception:
                     continue
+            
+            # PREPARACIÓN DEL RESUMEN DE POSICIONES ABIERTAS
+            if not df_portafolio.empty:
+                tickers_abiertos = ", ".join(df_portafolio["Ticker"].str.replace('.BA', '', regex=False).tolist())
+                texto_posiciones = f"\n\n📌 *Cartera Actual Abierta:* `{tickers_abiertos}` ({len(df_portafolio)} posiciones)."
+            else:
+                texto_posiciones = "\n\n📌 *Cartera Actual Abierta:* Ninguna posición activa."
                     
             if candidatos_validos:
                 df_ops = pd.DataFrame(candidatos_validos).sort_values(by="Score", ascending=False).reset_index(drop=True)
@@ -232,22 +238,19 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                     f"🎯 *ORDEN DE TAKE PROFIT:* ${mejor_opcion['TakeProfit']:,.2f}\n\n"
                     f"💰 *Costo Total:* ${mejor_opcion['Total']:,.2f}\n"
                     f"🔍 *Score de Calidad:* {int(mejor_opcion['Score'])} / 3 Puntos."
+                    f"{texto_posiciones}"
                 )
                 enviar_alerta_telegram(msg_tg)
                 st.dataframe(df_ops, use_container_width=True)
             else:
-                # Si no hay candidatos válidos pero detectamos bloqueo por falta de dinero y tenés posiciones abiertas
                 if oportunidades_descartadas_por_capital and not df_portafolio.empty:
-                    cant_posiciones = len(df_portafolio)
-                    tickers_abiertos = ", ".join(df_portafolio["Ticker"].tolist())
-                    
                     msg_bloqueo = (
                         f"⚠️ *ALERTA DE CAPITAL DETENIDA* ⚠️\n\n"
-                        f"El escáner detectó oportunidades potenciales en el mercado, pero tu capital disponible actual (${capital_disponible:,.2f}) es insuficiente para abrir nuevas posiciones.\n\n"
-                        f"📌 *Estado actual:* Tenés actualmente `{cant_posiciones}` posición(es) abierta(s) en tu cartera vigilada de Balanz: `{tickers_abiertos}`.\n"
-                        f"💡 *Sugerencia:* Evaluá si es momento de ajustar algún Take Profit o esperar salidas para liberar liquidez."
+                        f"El escáner detectó oportunidades potenciales en el mercado, pero tu capital disponible actual (${capital_disponible:,.2f}) es insuficiente para abrir nuevas posiciones."
+                        f"{texto_posiciones}"
+                        f"\n💡 *Sugerencia:* Evaluá si es momento de esperar salidas para liberar liquidez."
                     )
                     enviar_alerta_telegram(msg_bloqueo)
-                    st.warning("Falta de capital para nuevas operaciones. Alerta enviada a Telegram indicando tus posiciones abiertas.")
+                    st.warning("Falta de capital para nuevas operaciones. Alerta enviada a Telegram.")
                 else:
                     st.info("Ningún CEDEAR reúne las condiciones técnicas en la rueda en vivo de hoy.")
