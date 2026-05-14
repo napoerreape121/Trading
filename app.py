@@ -17,7 +17,7 @@ TELEGRAM_CHAT_ID = "6872048498"
 
 def enviar_alerta_telegram(mensaje):
     """Módulo oficial de comunicación en red con la API de Telegram"""
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    url = f"telegram.org{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
     try:
         r = requests.post(url, json=payload, timeout=10)
@@ -225,10 +225,28 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
             # DESPACHO DE ENTRADAS VÁLIDAS
             if candidatos_validos:
                 df_ops = pd.DataFrame(candidatos_validos).sort_values(by="Score", ascending=False).reset_index(drop=True)
-                # CORRECCIÓN AQUÍ: Se añade el corchete [0] indispensable para indexar la fila correctamente en Pandas
                 mejor_opcion = df_ops.iloc[0]
                 
-                # Revisamos si la mejor opción elegida ya existía en la cartera del usuario
+                # ------ NUEVA LÓGICA DE CONTABILIDAD Y AUDITORÍA DE SALDO REMANENTE ------
+                saldo_restante = capital_disponible - mejor_opcion["Total"]
+                
+                if saldo_restante >= mejor_opcion["Neto"]:
+                    papeles_extras_posibles = int(saldo_restante // mejor_opcion["Neto"])
+                    texto_estado_billetera = (
+                        f"\n\n💰 *ANÁLISIS DE LIQUIDEZ POST-COMPRA:*"
+                        f"\n✅ *¡Te alcanza para seguir comprando!*"
+                        f"\n• Saldo remanente proyectado: ${saldo_restante:,.2f}"
+                        f"\n• Con este dinero podrías comprar hasta `{papeles_extras_posibles}` nominales adicionales de `{mejor_opcion['Ticker']}` si quisieras aumentar tu exposición."
+                    )
+                else:
+                    texto_estado_billetera = (
+                        f"\n\n💰 *ANÁLISIS DE LIQUIDEZ POST-COMPRA:*"
+                        f"\n🛑 *¡Capacidad de compra agotada con esta señal!*"
+                        f"\n• El saldo restante proyectado sería de ${saldo_restante:,.2f}."
+                        f"\n• Este monto es menor al precio neto por unidad (${mejor_opcion['Neto']:,.2f}), por lo que NO podrías seguir agregando más papeles a tu cartera."
+                    )
+                # ------------------------------------------------------------------------
+
                 es_recompra = False
                 papeles_viejos = 0
                 if not df_portafolio.empty and (mejor_opcion["Ticker"] in df_portafolio["Ticker"].str.replace('.BA', '', regex=False).values):
@@ -256,12 +274,13 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                     f"💰 *Costo Operación:* ${mejor_opcion['Total']:,.2f}\n"
                     f"🔍 *Score Técnico:* {int(mejor_opcion['Score'])} / 3 Puntos."
                     f"{detalle_recompra}"
+                    f"{texto_estado_billetera}" # SE AGREGA EL INFORME DE LIQUIDEZ AL MENSAJE DE COMPRA
                     f"{texto_inventario_completo}"
                 )
                 enviar_alerta_telegram(msg_tg)
                 st.dataframe(df_ops, use_container_width=True)
             
-            # MANEJO EXCLUSIVO DE BLOQUEOS POR FALTA DE CAPITAL
+            # MANEJO EXCLUSIVO DE BLOQUEOS POR FALTA DE CAPITAL INICIAL
             else:
                 if detalles_bloqueo_capital and not df_portafolio.empty:
                     ticker_bloqueado_cartera = None
@@ -283,11 +302,11 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                             f"• La estrategia sugiere añadir: `{info_bloqueo['CantidadSugerida']}` nominales.\n"
                             f"• Costo de la operación: ${info_bloqueo['MontoRequerido']:,.2f}\n"
                             f"• Tu capital libre: ${capital_disponible:,.2f}\n"
-                            f"❌ *Resultado:* NO se puede ejecutar la recompra. Te faltan `${falta_dinero:,.2f}` de saldo libre."
+                            f"❌ *Resultado:* NO se puede ejecutar la recompra. Te faltan `${falta_dinero:,.2f}` de saldo libre para procesar este activo."
                             f"{texto_inventario_completo}"
                         )
                     else:
-                        primer_tk = list(detalles_bloqueo_capital.keys())[0]
+                        primer_tk = list(detalles_bloqueo_capital.keys())
                         info_bloqueo = detalles_bloqueo_capital[primer_tk]
                         falta_dinero = info_bloqueo["MontoRequerido"] - capital_disponible
                         
