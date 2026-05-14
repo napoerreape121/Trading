@@ -17,8 +17,7 @@ TELEGRAM_CHAT_ID = "6872048498"
 
 def enviar_alerta_telegram(mensaje):
     """Módulo oficial de comunicación en red con la API de Telegram"""
-    # LÍNEA CORREGIDA CON EL ENLACE COMPLETO Y SEGURO:
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    url = f"telegram.org{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
     try:
         r = requests.post(url, json=payload, timeout=10)
@@ -117,9 +116,10 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
         except Exception as e:
             st.warning("No se pudieron verificar las salidas de cartera. Continuando con escaner de compras...")
 
-    # PARTE 2: BUSCAR NUEVAS COMPRAS INTELIGENTES
+    # PARTE 2: BUSCAR NUEVAS COMPRAS INTELIGENTES Y EVALUAR RECOMPRAS
     with st.spinner("Buscando las mejores oportunidades según tu capital disponible hoy..."):
-        oportunidades_descartadas_por_capital = False
+        # Diccionario para almacenar detalles de oportunidades descartadas por falta de fondos
+        detalles_bloqueo_capital = {}
         
         try:
             datos_mercado = yf.download(tickers_escaner, period="6mo", interval="1d", progress=False)
@@ -130,9 +130,6 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
             candidatos_validos = []
             for ticker in tickers_escaner:
                 try:
-                    if not df_portafolio.empty and ticker in df_portafolio["Ticker"].values: 
-                        continue
-                    
                     df_t = pd.DataFrame()
                     df_t['Close'] = datos_mercado['Close'][ticker].dropna()
                     df_t['Open'] = datos_mercado['Open'][ticker].dropna()
@@ -193,8 +190,14 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                             continue
                         monto_compra = precio_ent_neto * cant_cedears
                         
+                        ticker_limpio = ticker.replace('.BA', '')
+                        
+                        # EVALUACIÓN ESPECÍFICA DE CAPITAL DISPONIBLE
                         if monto_compra > capital_disponible or precio_ent_neto > capital_disponible: 
-                            oportunidades_descartadas_por_capital = True
+                            detalles_bloqueo_capital[ticker_limpio] = {
+                                "MontoRequerido": monto_compra,
+                                "CantidadSugerida": cant_cedears
+                            }
                             continue
                         
                         score = 0
@@ -203,54 +206,102 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                         if tendencia_alcista: score += 1
                         
                         candidatos_validos.append({
-                            "Ticker": ticker.replace('.BA', ''), "Precio": precio_act, "Neto": precio_ent_neto,
+                            "Ticker": ticker_limpio, "Precio": precio_act, "Neto": precio_ent_neto,
                             "StopLoss": sl_g, "TakeProfit": precio_tp, "Cantidad": cant_cedears,
                             "Total": monto_compra, "Score": score
                         })
                 except Exception:
                     continue
             
-            # PREPARACIÓN DEL RESUMEN DE POSICIONES ABIERTAS
+            # CONSTRUCCIÓN DINÁMICA DEL INVENTARIO ACTUAL DE OPERACIONES REALES
+            texto_inventario_completo = ""
             if not df_portafolio.empty:
-                tickers_abiertos = ", ".join(df_portafolio["Ticker"].str.replace('.BA', '', regex=False).tolist())
-                texto_posiciones = f"\n\n📌 *Cartera Actual Abierta:* `{tickers_abiertos}` ({len(df_portafolio)} posiciones)."
+                texto_inventario_completo = "\n\n📦 *Tu Inventario Actual en Cartera (Balanz):*"
+                for idx, row in df_portafolio.iterrows():
+                    t_corto = row["Ticker"].replace('.BA', '')
+                    texto_inventario_completo += f"\n• `{t_corto}`: {int(row['Cantidad'])} papeles comprados a ${row['PrecioCompra']:,.2f}"
             else:
-                texto_posiciones = "\n\n📌 *Cartera Actual Abierta:* Ninguna posición activa."
+                texto_inventario_completo = "\n\n📌 *Cartera Actual Abierta:* Ninguna posición activa."
                     
+            # DESPACHO DE ENTRADAS VÁLIDAS
             if candidatos_validos:
                 df_ops = pd.DataFrame(candidatos_validos).sort_values(by="Score", ascending=False).reset_index(drop=True)
                 mejor_opcion = df_ops.iloc[0]
                 
+                # Revisamos si la mejor opción elegida ya existía en la cartera del usuario
+                es_recompra = False
+                papeles_viejos = 0
+                if not df_portafolio.empty and (mejor_opcion["Ticker"] in df_portafolio["Ticker"].str.replace('.BA', '', regex=False).values):
+                    es_recompra = True
+                    papeles_viejos = int(df_portafolio[df_portafolio["Ticker"].str.replace('.BA', '', regex=False) == mejor_opcion["Ticker"]]["Cantidad"].sum())
+
+                tipo_operacion = f"🔄 *RECOMPRA / REFUERZO DE CARTERA*" if es_recompra else f"🎯 *NUEVO CEDEAR SELECCIONADO*"
+                detalle_recompra = f"\n⚠️ *Nota:* Ya tenés `{papeles_viejos}` papeles de este activo. La estrategia valida comprar `{int(mejor_opcion['Cantidad'])}` nominales más porque tenés capital libre." if es_recompra else ""
+
                 st.success("🤖 ¡Análisis de Oportunidades Completado!")
-                st.subheader("🎯 La Mejor Decisión Sugerida por el Cerebro Cuantitativo")
+                st.subheader("🎯 Decisión Sugerida por el Cerebro Cuantitativo")
                 col_a, col_b, col_c = st.columns(3)
                 col_a.metric("CEDEAR", mejor_opcion["Ticker"])
-                col_b.metric("Cantidad de Nominales", int(mejor_opcion["Cantidad"]))
-                col_c.metric("Capital Invertido Neto", f"$ {mejor_opcion['Total']:,.2f}")
+                col_b.metric("Nominales Nuevos", int(mejor_opcion["Cantidad"]))
+                col_c.metric("Costo Operación", f"$ {mejor_opcion['Total']:,.2f}")
                 
                 msg_tg = (
-                    f"🤖 *¡ASIGNACIÓN DE CAPITAL REALISTA EN APERTURA! (Base Local Fija)*\n\n"
-                    f"🎯 *CEDEAR Seleccionado:* `{mejor_opcion['Ticker']}`\n"
-                    f"🤖 *Cantidad nominal a comprar:* {int(mejor_opcion['Cantidad'])} unidades\n\n"
+                    f"🤖 *¡INFORME DE SEÑALES EN RUEDA VIVO!*\n\n"
+                    f"{tipo_operacion}: `{mejor_opcion['Ticker']}`\n"
+                    f"🤖 *Cantidad adicional a comprar:* {int(mejor_opcion['Cantidad'])} unidades\n"
                     f"💵 *Precio Pantalla:* ${mejor_opcion['Precio']:,.2f}\n"
                     f"📐 *Precio Entrada Neto:* ${mejor_opcion['Neto']:,.2f}\n"
                     f"🛡️ *ORDEN DE STOP LOSS:* ${mejor_opcion['StopLoss']:,.2f}\n"
                     f"🎯 *ORDEN DE TAKE PROFIT:* ${mejor_opcion['TakeProfit']:,.2f}\n\n"
-                    f"💰 *Costo Total:* ${mejor_opcion['Total']:,.2f}\n"
-                    f"🔍 *Score de Calidad:* {int(mejor_opcion['Score'])} / 3 Puntos."
-                    f"{texto_posiciones}"
+                    f"💰 *Costo Operación:* ${mejor_opcion['Total']:,.2f}\n"
+                    f"🔍 *Score Técnico:* {int(mejor_opcion['Score'])} / 3 Puntos."
+                    f"{detalle_recompra}"
+                    f"{texto_inventario_completo}"
                 )
                 enviar_alerta_telegram(msg_tg)
                 st.dataframe(df_ops, use_container_width=True)
+            
+            # MANEJO EXCLUSIVO DE BLOQUEOS POR FALTA DE CAPITAL
             else:
-                if oportunidades_descartadas_por_capital and not df_portafolio.empty:
-                    msg_bloqueo = (
-                        f"⚠️ *ALERTA DE CAPITAL DETENIDA* ⚠️\n\n"
-                        f"El escáner detectó oportunidades potenciales en el mercado, pero tu capital disponible actual (${capital_disponible:,.2f}) es insuficiente para abrir nuevas posiciones."
-                        f"{texto_posiciones}"
-                        f"\n💡 *Sugerencia:* Evaluá si es momento de esperar salidas para liberar liquidez."
-                    )
+                if detalles_bloqueo_capital and not df_portafolio.empty:
+                    # Buscamos cuál de los CEDEARs bloqueados por dinero ya estaba en cartera
+                    ticker_bloqueado_cartera = None
+                    for tk in detalles_bloqueo_capital.keys():
+                        if tk in df_portafolio["Ticker"].str.replace('.BA', '', regex=False).values:
+                            ticker_bloqueado_cartera = tk
+                            break
+                    
+                    if ticker_bloqueado_cartera:
+                        # Caso 1: Dio señal de recompra pero NO te da el dinero
+                        info_bloqueo = detalles_bloqueo_capital[ticker_bloqueado_cartera]
+                        cant_poseida = int(df_portafolio[df_portafolio["Ticker"].str.replace('.BA', '', regex=False) == ticker_bloqueado_cartera]["Cantidad"].sum())
+                        falta_dinero = info_bloqueo["MontoRequerido"] - capital_disponible
+                        
+                        msg_bloqueo = (
+                            f"⚠️ *SEÑAL DE RECOMPRA DETENIDA POR CAPITAL* ⚠️\n\n"
+                            f"El CEDEAR `{ticker_bloqueado_cartera}` dio señal técnica para comprar más papeles según la estrategia.\n\n"
+                            f"📊 *Evaluación de Cartera:*\n"
+                            f"• Actualmente tenés: `{cant_poseida}` papeles comprados en Balanz.\n"
+                            f"• La estrategia sugiere añadir: `{info_bloqueo['CantidadSugerida']}` nominales.\n"
+                            f"• Costo de la operación: ${info_bloqueo['MontoRequerido']:,.2f}\n"
+                            f"• Tu capital libre: ${capital_disponible:,.2f}\n"
+                            f"❌ *Resultado:* NO se puede ejecutar la recompra. Te faltan `${falta_dinero:,.2f}` de saldo libre."
+                            f"{texto_inventario_completo}"
+                        )
+                    else:
+                        # Caso 2: Dio señal un activo nuevo pero no hay capital disponible
+                        primer_tk = list(detalles_bloqueo_capital.keys())[0]
+                        info_bloqueo = detalles_bloqueo_capital[primer_tk]
+                        falta_dinero = info_bloqueo["MontoRequerido"] - capital_disponible
+                        
+                        msg_bloqueo = (
+                            f"⚠️ *ALERTA DE LIQUIDEZ BLOQUEADA* ⚠️\n\n"
+                            f"Se detectó señal de compra en `{primer_tk}` para adquirir `{info_bloqueo['CantidadSugerida']}` unidades por un total de ${info_bloqueo['MontoRequerido']:,.2f}.\n\n"
+                            f"❌ *Resultado:* Tu capital actual de ${capital_disponible:,.2f} no es suficiente para esta operación. Precisás `${falta_dinero:,.2f}` adicionales."
+                            f"{texto_inventario_completo}"
+                        )
+                        
                     enviar_alerta_telegram(msg_bloqueo)
-                    st.warning("Falta de capital para nuevas operaciones. Alerta enviada a Telegram.")
+                    st.warning("Señales congeladas por saldo insuficiente. Reporte de balance detallado despachado a Telegram.")
                 else:
                     st.info("Ningún CEDEAR reúne las condiciones técnicas en la rueda en vivo de hoy.")
