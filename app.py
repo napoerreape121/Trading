@@ -16,7 +16,7 @@ st.write("Carga tus operaciones reales de Balanz. El bot vigilará tus Stop Loss
 # Credenciales fijas y verificadas de tu canal de Telegram
 TELEGRAM_TOKEN = "8624285419:AAHS-aTMjxM9H33dqtqC4JCQzwyqqL_Q71Y"
 TELEGRAM_CHAT_ID = "6872048498"
-HORA_AUTOMATICA = "00:54"  # <-- Configura acá la hora en formato 24hs para tu reporte diario automático
+HORA_AUTOMATICA = "00:59"  # <-- CONFIGURÁ ACÁ EL PRÓXIMO MINUTO DE TU RELOJ REAL DE ARGENTINA
 
 def enviar_alerta_telegram(mensaje):
     """Módulo oficial de comunicación en red con la API de Telegram"""
@@ -30,11 +30,11 @@ def enviar_alerta_telegram(mensaje):
 
 def obtener_ventana_balance_estimada(ticker):
     """Calcula la próxima ventana estimada de presentación de balances en Wall Street"""
-    ahora = datetime.now()
+    # Forzamos la hora de Argentina (UTC-3) restando 3 horas a la hora UTC del servidor
+    ahora = datetime.utcnow() - timedelta(hours=3)
     mes_actual = ahora.month
     año_actual = ahora.year
     
-    # Listas trimestrales reparadas minuciosamente para evitar errores de sintaxis
     if mes_actual in [1, 2, 3]:
         estimado = datetime(año_actual, 4, 25)
     elif mes_actual in [4, 5, 6]:
@@ -76,7 +76,7 @@ with st.sidebar.form(key="formulario_balanz", clear_on_submit=True):
     if boton_guardar and ticker_real:
         nueva_posicion = pd.DataFrame([{
             "Ticker": ticker_real, "Cantidad": int(cant_real), "PrecioCompra": float(precio_real),
-            "StopLoss": float(sl_real), "TakeProfit": float(tp_real), "FechaEntrada": datetime.now().strftime('%Y-%m-%d')
+            "StopLoss": float(sl_real), "TakeProfit": float(tp_real), "FechaEntrada": (datetime.utcnow() - timedelta(hours=3)).strftime('%Y-%m-%d')
         }])
         df_actualizado = pd.concat([df_portafolio, nueva_posicion], ignore_index=True)
         df_actualizado.to_csv(ARCHIVO_DB, index=False)
@@ -281,7 +281,8 @@ def ejecutar_analisis_cuantitativo(cap_fondos, ratio_b, umb_proximidad):
         else:
             texto_inventario_completo = "\n\n📌 *Posiciones Abiertas:* Ninguna posición activa."
                 
-        hora_actual = datetime.now().time()
+        # Forzamos hora de Argentina para las advertencias visuales
+        hora_actual = (datetime.utcnow() - timedelta(hours=3)).time()
         if hora_actual < datetime.strptime("15:30", "%H:%M").time():
             advertencia_horaria = "\n\n⏳ *⚠️ ADVERTENCIA DE RUEDA TEMPRANA:*\nEstás ejecutando el análisis antes de las 15:30. Vela en formación."
         else:
@@ -289,7 +290,7 @@ def ejecutar_analisis_cuantitativo(cap_fondos, ratio_b, umb_proximidad):
 
         if candidatos_validos:
             df_ops = pd.DataFrame(candidatos_validos).sort_values(by="Score", ascending=False).reset_index(drop=True)
-            mejor_opcion = df_ops.iloc[0]
+            mejor_opcion = df_ops.iloc
             
             saldo_restante = cap_fondos - mejor_opcion["Total"]
             riesgo_consumido = int(mejor_opcion["Cantidad"]) * mejor_opcion["PerdidaUnidad"]
@@ -330,7 +331,7 @@ def ejecutar_analisis_cuantitativo(cap_fondos, ratio_b, umb_proximidad):
         else:
             if detalles_bloqueo_capital:
                 df_bloqueados = pd.DataFrame.from_dict(detalles_bloqueo_capital, orient='index').sort_values(by="Score", ascending=False)
-                primer_tk = df_bloqueados.index[0]
+                primer_tk = df_bloqueados.index
                 info_bloqueo = detalles_bloqueo_capital[primer_tk]
                 falta_dinero = info_bloqueo["MontoRequerido"] - cap_fondos
                 balance_bloqueado = obtener_ventana_balance_estimada(primer_tk)
@@ -356,22 +357,23 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
     else:
         st.info("Ningún CEDEAR reúne condiciones o falta saldo. Revisá Telegram.")
 
-# --- MOTOR DE AUTOMATIZACIÓN EN SEGUNDO PLANO ---
+# --- MOTOR DE AUTOMATIZACIÓN CONFIGURADO CON HORA DE ARGENTINA (UTC-3) ---
 def daemon_reloj_bot():
-    """Bucle paralelo en segundo plano aislado con variables estáticas seguras de resguardo"""
+    """Bucle paralelo en segundo plano forzado minuciosamente a la hora oficial argentina"""
     ultima_fecha_ejecutada = ""
     while True:
-        ahora = datetime.now()
-        hora_str = ahora.strftime("%H:%M")
-        fecha_str = ahora.strftime("%Y-%m-%d")
+        # Tomamos el reloj UTC del servidor y le restamos 3 horas para tener la hora exacta de tu celular
+        ahora_arg = datetime.utcnow() - timedelta(hours=3)
+        hora_str = ahora_arg.strftime("%H:%M")
+        fecha_str = ahora_arg.strftime("%Y-%m-%d")
         
         if hora_str == HORA_AUTOMATICA and fecha_str != ultima_fecha_ejecutada:
             # Los fines de semana el bot descansa (Mercado Cerrado)
-            if ahora.weekday() < 5:
+            if ahora_arg.weekday() < 5:
                 ejecutar_analisis_cuantitativo(cap_fondos=158000.0, ratio_b=2.0, umb_proximidad=0.005)
             ultima_fecha_ejecutada = fecha_str
             
-        time.sleep(15) # Auditoría cada 15 segundos
+        time.sleep(10) # Auditoría veloz cada 10 segundos
 
 if "daemon_activo" not in st.session_state:
     st.session_state["daemon_activo"] = True
