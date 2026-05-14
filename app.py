@@ -17,7 +17,7 @@ TELEGRAM_CHAT_ID = "6872048498"
 
 def enviar_alerta_telegram(mensaje):
     """Módulo oficial de comunicación en red con la API de Telegram"""
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    url = f"telegram.org{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
     try:
         r = requests.post(url, json=payload, timeout=10)
@@ -207,7 +207,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                         candidatos_validos.append({
                             "Ticker": ticker_limpio, "Precio": precio_act, "Neto": precio_ent_neto,
                             "StopLoss": sl_g, "TakeProfit": precio_tp, "Cantidad": cant_cedears,
-                            "Total": monto_compra, "Score": score
+                            "Total": monto_compra, "Score": score, "PerdidaUnidad": perdida_accion
                         })
                 except Exception:
                     continue
@@ -227,23 +227,37 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                 df_ops = pd.DataFrame(candidatos_validos).sort_values(by="Score", ascending=False).reset_index(drop=True)
                 mejor_opcion = df_ops.iloc[0]
                 
-                # ------ NUEVA LÓGICA DE CONTABILIDAD Y AUDITORÍA DE SALDO REMANENTE ------
+                # ------ REGLA REPARADA DEL TRIÁNGULO DE HIERRO EXTREMO ------
                 saldo_restante = capital_disponible - mejor_opcion["Total"]
+                riesgo_consumido = int(mejor_opcion["Cantidad"]) * mejor_opcion["PerdidaUnidad"]
+                riesgo_remanente_permitido = riesgo_maximo_ars - riesgo_consumido
                 
-                if saldo_restante >= mejor_opcion["Neto"]:
-                    papeles_extras_posibles = int(saldo_restante // mejor_opcion["Neto"])
-                    texto_estado_billetera = (
-                        f"\n\n💰 *ANÁLISIS DE LIQUIDEZ POST-COMPRA:*"
-                        f"\n✅ *¡Te alcanza para seguir comprando!*"
-                        f"\n• Saldo remanente proyectado: ${saldo_restante:,.2f}"
-                        f"\n• Con este dinero podrías comprar hasta `{papeles_extras_posibles}` nominales adicionales de `{mejor_opcion['Ticker']}` si quisieras aumentar tu exposición."
-                    )
+                # El límite ya no es la billetera, es el riesgo remanente del 2% estricto
+                if riesgo_remanente_permitido >= mejor_opcion["PerdidaUnidad"]:
+                    papeles_extras_posibles = int(riesgo_remanente_permitido // mejor_opcion["PerdidaUnidad"])
+                    # Doble verificación: que no supere el dinero físico que queda en la cuenta
+                    max_por_dinero = int(saldo_restante // mejor_opcion["Neto"])
+                    if papeles_extras_posibles > max_por_dinero:
+                        papeles_extras_posibles = max_por_dinero
+                        
+                    if papeles_extras_posibles > 0:
+                        texto_estado_billetera = (
+                            f"\n\n🛡️ *TRIÁNGULO DE HIERRO (Gestión de Riesgo):*"
+                            f"\n✅ *Riesgo controlado:* La operación sugerida consume ${riesgo_consumido:,.2f} de riesgo."
+                            f"\n• Saldo remanente proyectado: ${saldo_restante:,.2f}"
+                            f"\n• Resguardo de capital: Podrías añadir hasta `{papeles_extras_posibles}` nominales extras de `{mejor_opcion['Ticker']}` sin superar el límite estricto del 2% de riesgo de tu cuenta."
+                        )
+                    else:
+                        texto_estado_billetera = (
+                            f"\n\n🛡️ *TRIÁNGULO DE HIERRO (Gestión de Riesgo):*"
+                            f"\n🛑 *Límite de riesgo alcanzado:* Comprar más papeles violaría la regla del 2%."
+                            f"\n• Aunque te queden ${saldo_restante:,.2f} en efectivo, NO podés comprar más nominales porque aumentarías la pérdida potencial por encima de tu tolerancia máxima."
+                        )
                 else:
                     texto_estado_billetera = (
-                        f"\n\n💰 *ANÁLISIS DE LIQUIDEZ POST-COMPRA:*"
-                        f"\n🛑 *¡Capacidad de compra agotada con esta señal!*"
-                        f"\n• El saldo restante proyectado sería de ${saldo_restante:,.2f}."
-                        f"\n• Este monto es menor al precio neto por unidad (${mejor_opcion['Neto']:,.2f}), por lo que NO podrías seguir agregando más papeles a tu cartera."
+                        f"\n\n🛡️ *TRIÁNGULO DE HIERRO (Gestión de Riesgo):*"
+                        f"\n🛑 *Límite de riesgo alcanzado:* La orden sugerida de `{int(mejor_opcion['Cantidad'])}` unidades ya ocupa el 100% de tu riesgo permitido."
+                        f"\n• NO tenés permitido comprar más nominales de `{mejor_opcion['Ticker']}` para proteger tu capital ante un salto del Stop Loss."
                     )
                 # ------------------------------------------------------------------------
 
@@ -260,7 +274,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                 st.subheader("🎯 Decisión Sugerida por el Cerebro Cuantitativo")
                 col_a, col_b, col_c = st.columns(3)
                 col_a.metric("CEDEAR", mejor_opcion["Ticker"])
-                col_b.metric("Nominales Nuevos", int(mejor_opcion["Cantidad"]))
+                col_a.metric("Nominales Nuevos", int(mejor_opcion["Cantidad"]))
                 col_c.metric("Costo Operación", f"$ {mejor_opcion['Total']:,.2f}")
                 
                 msg_tg = (
@@ -274,11 +288,11 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                     f"💰 *Costo Operación:* ${mejor_opcion['Total']:,.2f}\n"
                     f"🔍 *Score Técnico:* {int(mejor_opcion['Score'])} / 3 Puntos."
                     f"{detalle_recompra}"
-                    f"{texto_estado_billetera}" # SE AGREGA EL INFORME DE LIQUIDEZ AL MENSAJE DE COMPRA
+                    f"{texto_estado_billetera}"
                     f"{texto_inventario_completo}"
                 )
                 enviar_alerta_telegram(msg_tg)
-                st.dataframe(df_ops, use_container_width=True)
+                st.dataframe(df_ops.drop(columns=["PerdidaUnidad"]), use_container_width=True)
             
             # MANEJO EXCLUSIVO DE BLOQUEOS POR FALTA DE CAPITAL INICIAL
             else:
