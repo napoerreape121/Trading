@@ -92,6 +92,10 @@ umbral = st.sidebar.slider("Tolerancia de proximidad EMA", 0.001, 0.015, 0.005, 
 COSTO_OPERATIVO_TOTAL = (0.0050 + 0.0005) * 1.21 
 
 if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
+    
+    # GUARDAR PRECIOS EN VIVO DE CARTERA PARA EL INFORME FINAL
+    precios_vivos_cartera = {}
+    
     # PARTE 1: ESCANEAR SALIDAS CRÍTICAS DE TUS COMPRAS REALES
     if not df_portafolio.empty:
         st.write("🔍 Verificando estado de tus acciones en cartera...")
@@ -103,6 +107,9 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                 close_vivo = float(datos_cartera['Close'][tick].dropna().iloc[-1])
                 low_vivo = float(datos_cartera['Low'][tick].dropna().iloc[-1])
                 high_vivo = float(datos_cartera['High'][tick].dropna().iloc[-1])
+                
+                # Almacenamos el precio de cierre actual para usarlo en el reporte de inventario
+                precios_vivos_cartera[tick] = close_vivo
                 
                 if low_vivo <= float(row["StopLoss"]):
                     msg_sl = f"🚨 *¡ALERTA CRÍTICA DE SALIDA!* 🚨\n\n📉 El CEDEAR `{tick}` tocó tu *Stop Loss* de ${row['StopLoss']:,.2f}.\n🛒 *Acción:* VENDER de inmediato tus {int(row['Cantidad'])} unidades en Balanz para cortar pérdidas."
@@ -212,13 +219,33 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                 except Exception:
                     continue
             
-            # CONSTRUCCIÓN DINÁMICA DEL INVENTARIO ACTUAL DE OPERACIONES REALES
+            # NUEVO INVENTARIO TOTAL DETALLADO CON PRECIO VIVO Y RENDIMIENTO (P&L)
             texto_inventario_completo = ""
             if not df_portafolio.empty:
                 texto_inventario_completo = "\n\n📦 *Tu Inventario Actual en Cartera (Balanz):*"
                 for idx, row in df_portafolio.iterrows():
+                    t_completo = row["Ticker"] if row["Ticker"].endswith(".BA") else f"{row['Ticker']}.BA"
                     t_corto = row["Ticker"].replace('.BA', '')
-                    texto_inventario_completo += f"\n• `{t_corto}`: {int(row['Cantidad'])} papeles comprados a ${row['PrecioCompra']:,.2f}"
+                    
+                    # Buscamos el precio actual. Si falló la descarga previa, la hacemos individual e instantánea
+                    if t_completo in precios_vivos_cartera:
+                        pr_actual = precios_vivos_cartera[t_completo]
+                    else:
+                        try:
+                            pr_actual = float(yf.download(t_completo, period="1d", progress=False)['Close'].iloc[-1])
+                        except Exception:
+                            pr_actual = float(row["PrecioCompra"]) # Resguardo por si falla Yahoo
+                    
+                    # Cálculo del rendimiento porcentual
+                    rendimiento_porc = ((pr_actual - float(row["PrecioCompra"])) / float(row["PrecioCompra"])) * 100
+                    emoji_rendimiento = "🟢" if rendimiento_porc >= 0 else "🔴"
+                    
+                    texto_inventario_completo += (
+                        f"\n• `{t_corto}`: {int(row['Cantidad'])} pap. "
+                        f"| Compra: ${row['PrecioCompra']:,.2f} "
+                        f"| Actual: ${pr_actual:,.2f} "
+                        f"| Rend: {emoji_rendimiento} {rendimiento_porc:+.2f}%"
+                    )
             else:
                 texto_inventario_completo = "\n\n📌 *Cartera Actual Abierta:* Ninguna posición activa."
                     
@@ -227,15 +254,13 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                 df_ops = pd.DataFrame(candidatos_validos).sort_values(by="Score", ascending=False).reset_index(drop=True)
                 mejor_opcion = df_ops.iloc[0]
                 
-                # ------ REGLA REPARADA DEL TRIÁNGULO DE HIERRO EXTREMO ------
+                # ------ REGLA MATEMÁTICA DEL TRIÁNGULO DE HIERRO EXTREMO ------
                 saldo_restante = capital_disponible - mejor_opcion["Total"]
                 riesgo_consumido = int(mejor_opcion["Cantidad"]) * mejor_opcion["PerdidaUnidad"]
                 riesgo_remanente_permitido = riesgo_maximo_ars - riesgo_consumido
                 
-                # El límite ya no es la billetera, es el riesgo remanente del 2% estricto
                 if riesgo_remanente_permitido >= mejor_opcion["PerdidaUnidad"]:
                     papeles_extras_posibles = int(riesgo_remanente_permitido // mejor_opcion["PerdidaUnidad"])
-                    # Doble verificación: que no supere el dinero físico que queda en la cuenta
                     max_por_dinero = int(saldo_restante // mejor_opcion["Neto"])
                     if papeles_extras_posibles > max_por_dinero:
                         papeles_extras_posibles = max_por_dinero
@@ -245,7 +270,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                             f"\n\n🛡️ *TRIÁNGULO DE HIERRO (Gestión de Riesgo):*"
                             f"\n✅ *Riesgo controlado:* La operación sugerida consume ${riesgo_consumido:,.2f} de riesgo."
                             f"\n• Saldo remanente proyectado: ${saldo_restante:,.2f}"
-                            f"\n• Resguardo de capital: Podrías añadir hasta `{papeles_extras_posibles}` nominales extras de `{mejor_opcion['Ticker']}` sin superar el límite estricto del 2% de riesgo de tu cuenta."
+                            f"\n• Resguardo de capital: Podrías añadir hasta `{papeles_extras_posibles}` nominales extras de `{mejor_opcion['Ticker']}` sin superar el límite estricto del 2%."
                         )
                     else:
                         texto_estado_billetera = (
@@ -257,9 +282,8 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                     texto_estado_billetera = (
                         f"\n\n🛡️ *TRIÁNGULO DE HIERRO (Gestión de Riesgo):*"
                         f"\n🛑 *Límite de riesgo alcanzado:* La orden sugerida de `{int(mejor_opcion['Cantidad'])}` unidades ya ocupa el 100% de tu riesgo permitido."
-                        f"\n• NO tenés permitido comprar más nominales de `{mejor_opcion['Ticker']}` para proteger tu capital ante un salto del Stop Loss."
+                        f"\n• NO tenés permitido comprar más nominales de `{mejor_opcion['Ticker']}` para proteger tu cuenta ante un salto del Stop Loss."
                     )
-                # ------------------------------------------------------------------------
 
                 es_recompra = False
                 papeles_viejos = 0
@@ -268,7 +292,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                     papeles_viejos = int(df_portafolio[df_portafolio["Ticker"].str.replace('.BA', '', regex=False) == mejor_opcion["Ticker"]]["Cantidad"].sum())
 
                 tipo_operacion = f"🔄 *RECOMPRA / REFUERZO DE CARTERA*" if es_recompra else f"🎯 *NUEVO CEDEAR SELECCIONADO*"
-                detalle_recompra = f"\n⚠️ *Nota:* Ya tenés `{papeles_viejos}` papeles de este activo. La estrategia valida comprar `{int(mejor_opcion['Cantidad'])}` nominales más porque tenés capital libre." if es_recompra else ""
+                detalle_recompra = f"\n⚠️ *Nota:* Ya tenés `{papeles_viejos}` papeles de este activo en Balanz." if es_recompra else ""
 
                 st.success("🤖 ¡Análisis de Oportunidades Completado!")
                 st.subheader("🎯 Decisión Sugerida por el Cerebro Cuantitativo")
@@ -289,7 +313,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                     f"🔍 *Score Técnico:* {int(mejor_opcion['Score'])} / 3 Puntos."
                     f"{detalle_recompra}"
                     f"{texto_estado_billetera}"
-                    f"{texto_inventario_completo}"
+                    f"{texto_inventario_completo}" # INVENTARIO CON PRECIOS EN VIVO ACTUALIZADOS
                 )
                 enviar_alerta_telegram(msg_tg)
                 st.dataframe(df_ops.drop(columns=["PerdidaUnidad"]), use_container_width=True)
@@ -316,7 +340,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                             f"• La estrategia sugiere añadir: `{info_bloqueo['CantidadSugerida']}` nominales.\n"
                             f"• Costo de la operación: ${info_bloqueo['MontoRequerido']:,.2f}\n"
                             f"• Tu capital libre: ${capital_disponible:,.2f}\n"
-                            f"❌ *Resultado:* NO se puede ejecutar la recompra. Te faltan `${falta_dinero:,.2f}` de saldo libre para procesar este activo."
+                            f"❌ *Resultado:* NO se puede ejecutar la recompra. Te faltan `${falta_dinero:,.2f}` de saldo libre."
                             f"{texto_inventario_completo}"
                         )
                     else:
@@ -332,6 +356,6 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                         )
                         
                     enviar_alerta_telegram(msg_bloqueo)
-                    st.warning("Señales congeladas por saldo insuficiente. Reporte de balance detallado despachado a Telegram.")
+                    st.warning("Señales congeladas por saldo insuficiente.")
                 else:
                     st.info("Ningún CEDEAR reúne las condiciones técnicas en la rueda en vivo de hoy.")
