@@ -32,7 +32,6 @@ def obtener_ventana_balance_estimada(ticker):
     año_actual = ahora.year
     
     if mes_actual in [12, 1, 2, 3]:
-        mes_est = 1 if mes_actual == 12 else mes_actual
         estimado = datetime(año_actual if mes_actual != 12 else año_actual + 1, 1, 25)
     elif mes_actual in [4, 5, 6]:
         estimado = datetime(año_actual, 4, 25)
@@ -217,7 +216,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                     if tendencia_alcista and es_vela_verde and (toca_ema9 or toca_ema50):
                         disparar = True
                         ema_ref = ema50 if toca_ema50 else ema9
-                    elif not tendencia_alcista wagons and es_vela_verde and toca_ema9 and rsi14 <= 55:
+                    elif not tendencia_alcista and es_vela_verde and toca_ema9 and rsi14 <= 55:
                         disparar = True
                         ema_ref = ema9
                         
@@ -249,7 +248,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                                 "Neto": precio_ent_neto,
                                 "SL": sl_g,
                                 "TP": precio_tp,
-                                "PerdidaUnidad": perdida_accion
+                                "Score": 3 if tendencia_alcista and (40 < rsi14 < 60) and (histograma_macd > hist_anterior) else 2
                             }
                             continue
                         
@@ -308,7 +307,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                     "Los indicadores técnicos (EMA/RSI) podrían cambiar al cierre de la rueda por ruido de apertura."
                 )
             else:
-                advertencia_horaria = "\n\n📊 *CONSOLIDACIÓN:* Análisis ejecutado en hora óptima. Vela diaria madura y confirmada con bajo ruido institucional."
+                advertencia_horaria = "\n\n📊 *CONSOLIDACIÓN:* Análisis ejecutado en hora óptima. Vela diaria madura y confirmed con bajo ruido institucional."
 
             # ------------------------------------------------------------------------
             # CASO ESCENARIO A: SÍ SE PUEDE COMPRAR (SE ENCONTRÓ CANDIDATO Y ALCANZA EL SALDO)
