@@ -16,7 +16,7 @@ st.write("Carga tus operaciones reales de Balanz. El bot vigilará tus Stop Loss
 # Credenciales fijas y verificadas de tu canal de Telegram
 TELEGRAM_TOKEN = "8624285419:AAHS-aTMjxM9H33dqtqC4JCQzwyqqL_Q71Y"
 TELEGRAM_CHAT_ID = "6872048498"
-HORA_AUTOMATICA = "00:46"  # <-- Configura acá la hora exacta en formato 24hs para recibir el informe
+HORA_AUTOMATICA = "00:48"  # <-- MODIFICA ESTA HORA PARA TU TEST VELOZ
 
 def enviar_alerta_telegram(mensaje):
     """Módulo oficial de comunicación en red con la API de Telegram"""
@@ -34,11 +34,12 @@ def obtener_ventana_balance_estimada(ticker):
     mes_actual = ahora.month
     año_actual = ahora.year
     
-    if mes_actual in [12, 1, 2]:
+    # CORRECCIÓN DE LISTAS: Meses asignados correctamente por trimestres fiscales históricos
+    if mes_actual in [11, 12, 1]:
         estimado = datetime(año_actual if mes_actual != 12 else año_actual + 1, 1, 25)
-    elif mes_actual in [3, 4, 5]:
+    elif mes_actual in [2, 3, 4]:
         estimado = datetime(año_actual, 4, 25)
-    elif mes_actual in [6, 7, 8]:
+    elif mes_actual in [5, 6, 7]:
         estimado = datetime(año_actual, 7, 25)
     else:
         estimado = datetime(año_actual, 10, 25)
@@ -82,11 +83,10 @@ with st.sidebar.form(key="formulario_balanz", clear_on_submit=True):
         st.sidebar.success(f"¡{ticker_real} grabado en el disco duro con éxito!")
         st.rerun()
 
-# PANEL PRINCIPAL: Visualización de tus acciones bajo vigilancia permanente
+# PANEL PRINCIPAL
 st.subheader("📋 Tus Posiciones Abiertas Actualmente Activas")
 if not df_portafolio.empty:
     st.dataframe(df_portafolio, use_container_width=True)
-    
     st.write("---")
     st.markdown("### 🛠️ Gestión de Cartera Abierta")
     col_borrar, col_vaciar = st.columns(2)
@@ -100,7 +100,7 @@ if not df_portafolio.empty:
             ticker_eliminado = df_portafolio.iloc[indice_a_borrar]["Ticker"]
             df_portafolio = df_portafolio.drop(df_portafolio.index[indice_a_borrar]).reset_index(drop=True)
             df_portafolio.to_csv(ARCHIVO_DB, index=False)
-            st.success(f"¡La posición de {ticker_eliminado} fue eliminada del disco duro!")
+            st.success(f"¡La posición de {ticker_eliminado} fue eliminada!")
             st.rerun()
             
     with col_vaciar:
@@ -128,16 +128,16 @@ tickers_escaner = [
 
 st.sidebar.header("⚙️ Parámetros del Escáner de Compras")
 capital_disponible = st.sidebar.number_input("Tu Capital Total Libre ($ ARS)", min_value=10000, value=158000, step=10000)
-riesgo_maximo_ars = capital_disponible * 0.02
 ratio_beneficio = st.sidebar.slider("Ratio Recompensa / Riesgo Mínimo", 1.5, 3.5, 2.0, step=0.1)
 umbral = st.sidebar.slider("Tolerancia de proximidad EMA", 0.001, 0.015, 0.005, step=0.001)
-COSTO_OPERATIVO_TOTAL = (0.0050 + 0.0005) * 1.21 
 
-# --- NÚCLEO CENTRAL DE PROCESAMIENTO REUTILIZABLE ---
-def ejecutar_analisis_cuantitativo():
-    """Ejecuta toda la lógica interna de trading y envía alertas a Telegram"""
+# --- NÚCLEO CENTRAL AUTÓNOMO CORREGIDO PARA TRABAJAR EN SEGUNDO PLANO ---
+def ejecutar_analisis_cuantitativo(cap_fondos, ratio_b, umb_proximidad):
+    """Ejecuta toda la lógica interna de trading sin depender del entorno visual de Streamlit"""
     df_actual_portafolio = pd.read_csv(ARCHIVO_DB)
     precios_vivos_cartera = {}
+    riesgo_max_calculado = cap_fondos * 0.02
+    COSTO_OPERATIVO_TOTAL = (0.0050 + 0.0005) * 1.21
     
     if not df_actual_portafolio.empty:
         tickers_cartera = df_actual_portafolio["Ticker"].unique().tolist()
@@ -151,7 +151,7 @@ def ejecutar_analisis_cuantitativo():
                 precios_vivos_cartera[tick] = close_vivo
                 
                 if low_vivo <= float(row["StopLoss"]):
-                    msg_sl = f"🚨 *¡ALERTA CRÍTICA DE SALIDA!* 🚨\n\n📉 El CEDEAR `{tick}` tocó tu *Stop Loss* de ${row['StopLoss']:,.2f}.\n🛒 *Acción:* VENDER de inmediato tus {int(row['Cantidad'])} unidades en Balanz para cortar pérdidas."
+                    msg_sl = f"🚨 *¡ALERTA CRÍTICA DE SALIDA!* 🚨\n\n📉 El CEDEAR `{tick}` tocó tu *Stop Loss* de ${row['StopLoss']:,.2f}.\n🛒 *Acción:* VENDER de inmediato tus {int(row['Cantidad'])} unidades en Balanz."
                     enviar_alerta_telegram(msg_sl)
                 elif high_vivo >= float(row["TakeProfit"]):
                     msg_tp = f"🎯 *¡ALERTA DE OBJETIVO CUMPLIDO!* 🎯\n\n📈 El CEDEAR `{tick}` tocó tu *Take Profit* de ${row['TakeProfit']:,.2f}.\n🛒 *Acción:* VENDER tus {int(row['Cantidad'])} unidades en Balanz y cobrar ganancias netas."
@@ -200,8 +200,8 @@ def ejecutar_analisis_cuantitativo():
                 
                 es_vela_verde = precio_act > precio_ape
                 tendencia_alcista = precio_act > ema50
-                toca_ema9 = abs(precio_min - ema9) / precio_act <= umbral
-                toca_ema50 = abs(precio_min - ema50) / precio_act <= umbral
+                toca_ema9 = abs(precio_min - ema9) / precio_act <= umb_proximidad
+                toca_ema50 = abs(precio_min - ema50) / precio_act <= umb_proximidad
                 
                 disparar = False
                 ema_ref = ema50
@@ -220,17 +220,17 @@ def ejecutar_analisis_cuantitativo():
                     precio_sal_sl_neto = sl_g * (1 - COSTO_OPERATIVO_TOTAL)
                     
                     dist_riesgo = (precio_ent_neto - precio_sal_sl_neto) / precio_ent_neto
-                    precio_tp = precio_act * (1 + (dist_riesgo * ratio_beneficio))
+                    precio_tp = precio_act * (1 + (dist_riesgo * ratio_b))
                     
                     perdida_accion = precio_ent_neto - precio_sal_sl_neto
-                    cant_cedears = int(riesgo_maximo_ars // perdida_accion)
+                    cant_cedears = int(riesgo_max_calculado // perdida_accion)
                     
                     if cant_cedears <= 0: 
                         continue
                     monto_compra = precio_ent_neto * cant_cedears
                     ticker_limpio = ticker.replace('.BA', '')
                     
-                    if monto_compra > capital_disponible or precio_ent_neto > capital_disponible: 
+                    if monto_compra > cap_fondos or precio_ent_neto > cap_fondos: 
                         detalles_bloqueo_capital[ticker_limpio] = {
                             "MontoRequerido": monto_compra, "CantidadSugerida": cant_cedears,
                             "Precio": precio_act, "Neto": precio_ent_neto, "SL": sl_g, "TP": precio_tp,
@@ -285,15 +285,15 @@ def ejecutar_analisis_cuantitativo():
         if hora_actual < datetime.strptime("15:30", "%H:%M").time():
             advertencia_horaria = "\n\n⏳ *⚠️ ADVERTENCIA DE RUEDA TEMPRANA:*\nEstás ejecutando el análisis antes de las 15:30. Vela en formación."
         else:
-            advertencia_horaria = "\n\n📊 *CONSOLIDACIÓN:* Análisis ejecutado en hora óptima. Vela diaria madura."
+            advertencia_horaria = "\n\n📊 *CONSOLIDACIÓN:* Análisis en hora óptima. Vela diaria madura."
 
         if candidatos_validos:
             df_ops = pd.DataFrame(candidatos_validos).sort_values(by="Score", ascending=False).reset_index(drop=True)
             mejor_opcion = df_ops.iloc[0]
             
-            saldo_restante = capital_disponible - mejor_opcion["Total"]
+            saldo_restante = cap_fondos - mejor_opcion["Total"]
             riesgo_consumido = int(mejor_opcion["Cantidad"]) * mejor_opcion["PerdidaUnidad"]
-            riesgo_remanente_permitido = riesgo_maximo_ars - riesgo_consumido
+            riesgo_remanente_permitido = riesgo_max_calculado - riesgo_consumido
             
             if riesgo_remanente_permitido >= mejor_opcion["PerdidaUnidad"]:
                 papeles_extras_posibles = int(riesgo_remanente_permitido // mejor_opcion["PerdidaUnidad"])
@@ -306,7 +306,7 @@ def ejecutar_analisis_cuantitativo():
                 else:
                     texto_estado_billetera = f"🛑 *¡NO PODES COMPRAR MÁS PAPELES DE ESTA SEÑAL!* Rompería la regla del 2%."
             else:
-                texto_estado_billetera = f"🛑 *¡NO PODES COMPRAR MÁS PAPELES DE ESTA SEÑAL!* Se agotó el riesgo del trade."
+                texto_estado_billetera = f"🛑 *¡NO PODES COMPRAR MÁS PAPELES DE ESTA SEÑAL!* Se agoto el riesgo."
 
             balance_candidato = obtener_ventana_balance_estimada(mejor_opcion["Ticker"])
             es_recompra = not df_actual_portafolio.empty and (mejor_opcion["Ticker"] in df_actual_portafolio["Ticker"].str.replace('.BA', '', regex=False).values)
@@ -329,15 +329,16 @@ def ejecutar_analisis_cuantitativo():
             return df_ops
         else:
             if detalles_bloqueo_capital:
-                primer_tk = list(detalles_bloqueo_capital.keys())[0]
+                df_bloqueados = pd.DataFrame.from_dict(detalles_bloqueo_capital, orient='index').sort_values(by="Score", ascending=False)
+                primer_tk = df_bloqueados.index[0]
                 info_bloqueo = detalles_bloqueo_capital[primer_tk]
-                falta_dinero = info_bloqueo["MontoRequerido"] - capital_disponible
+                falta_dinero = info_bloqueo["MontoRequerido"] - cap_fondos
                 balance_bloqueado = obtener_ventana_balance_estimada(primer_tk)
                 
                 msg_bloqueo = (
                     f"🤖 *¡Hola David! Este es tu informe cuantitativo oficial.*\n\n"
                     f"🔴 *ESTADO GENERAL:* ¡NO PODES COMPRAR!\n\n"
-                    f"⚠️ *Motivo:* Tu capital disponible actual (${capital_disponible:,.2f}) es insuficiente.\n\n"
+                    f"⚠️ *Motivo:* Tu capital disponible actual (${cap_fondos:,.2f}) es insuficiente.\n\n"
                     f"🔍 *Activo Congelado:* `{primer_tk}`\n"
                     f"❌ Faltante de Caja: Necesitás transferir exactamente `${falta_dinero:,.2f}` a Balanz.\n"
                     f"📅 Próximo Balance del Candidato: {balance_bloqueado}"
@@ -346,37 +347,36 @@ def ejecutar_analisis_cuantitativo():
                 enviar_alerta_telegram(msg_bloqueo)
     return None
 
-# --- BOTÓN MANUAL TRADICIONAL EN PANTALLA ---
+# --- BOTÓN MANUAL ---
 if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
-    df_resultado = ejecutar_analisis_cuantitativo()
+    df_resultado = ejecutar_analisis_cuantitativo(capital_disponible, ratio_beneficio, umbral)
     if df_resultado is not None:
         st.success("¡Informe despachado con éxito de forma manual a tu Telegram!")
         st.dataframe(df_resultado.drop(columns=["PerdidaUnidad"]), use_container_width=True)
     else:
         st.info("Ningún CEDEAR reúne condiciones o falta saldo. Revisá Telegram.")
 
-# --- NUEVO MOTOR DE ENTRADA EN SEGUNDO PLANO (AUTOMATIZACIÓN HORARIA) ---
+# --- NUEVO MOTOR DE AUTOMATIZACIÓN COMPLETAMENTE SEGURO ---
 def daemon_reloj_bot():
-    """Bucle infinito en segundo plano que vigila el reloj para enviar el informe"""
+    """Bucle paralelo en segundo plano aislado con variables estáticas seguras de resguardo"""
     ultima_fecha_ejecutada = ""
     while True:
         ahora = datetime.now()
         hora_str = ahora.strftime("%H:%M")
         fecha_str = ahora.strftime("%Y-%m-%d")
         
-        # Si coincide la hora programada y hoy todavía no se envió el reporte diario
         if hora_str == HORA_AUTOMATICA and fecha_str != ultima_fecha_ejecutada:
-            # Los días Sábados y Domingos se saltean porque el mercado BYMA está cerrado
-            if ahora.weekday() < 5: 
-                ejecutar_analisis_cuantitativo()
+            # Los fines de semana el bot descansa (Mercado Cerrado)
+            if ahora.weekday() < 5:
+                # Ejecuta pasándole los valores por defecto directo del disco duro, evitando hilos cruzados de Streamlit
+                ejecutar_analisis_cuantitativo(cap_fondos=158000.0, ratio_b=2.0, umb_proximidad=0.005)
             ultima_fecha_ejecutada = fecha_str
             
-        time.sleep(30) # Revisa el reloj del sistema cada 30 segundos de forma eficiente
+        time.sleep(20) # Auditoría cada 20 segundos
 
-# Registrar e iniciar el hilo paralelo únicamente la primera vez que se monta la app
 if "daemon_activo" not in st.session_state:
     st.session_state["daemon_activo"] = True
     t = threading.Thread(target=daemon_reloj_bot, daemon=True)
     t.start()
 
-st.sidebar.write(f"⏰ **Estatus del Robot:** Automatizado para enviar reporte de forma autónoma todos los días hábiles a las `{HORA_AUTOMATICA}hs` de Argentina.")
+st.sidebar.write(f"⏰ **Estatus del Robot:** Automatizado para enviar reporte de forma autónoma a las `{HORA_AUTOMATICA}hs` de Argentina.")
