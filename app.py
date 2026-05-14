@@ -31,19 +31,17 @@ def obtener_ventana_balance_estimada(ticker):
     mes_actual = ahora.month
     año_actual = ahora.year
     
-    # Mapeo general de trimestres fiscales estándar (Earnings Season)
-    if mes_actual in [12, 1, 2]:
+    if mes_actual in [12, 1, 2, 3]:
         mes_est = 1 if mes_actual == 12 else mes_actual
         estimado = datetime(año_actual if mes_actual != 12 else año_actual + 1, 1, 25)
-    elif mes_actual in [3, 4, 5]:
+    elif mes_actual in [4, 5, 6]:
         estimado = datetime(año_actual, 4, 25)
-    elif mes_actual in [6, 7, 8]:
+    elif mes_actual in [7, 8, 9]:
         estimado = datetime(año_actual, 7, 25)
     else:
         estimado = datetime(año_actual, 10, 25)
         
     if estimado < ahora:
-        # Si ya pasó la de este trimestre, proyecta la del siguiente (3 meses después)
         estimado += timedelta(days=90)
         
     dias_restantes = (estimado - ahora).days
@@ -219,7 +217,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                     if tendencia_alcista and es_vela_verde and (toca_ema9 or toca_ema50):
                         disparar = True
                         ema_ref = ema50 if toca_ema50 else ema9
-                    elif not tendencia_alcista and es_vela_verde and toca_ema9 and rsi14 <= 55:
+                    elif not tendencia_alcista wagons and es_vela_verde and toca_ema9 and rsi14 <= 55:
                         disparar = True
                         ema_ref = ema9
                         
@@ -251,7 +249,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                                 "Neto": precio_ent_neto,
                                 "SL": sl_g,
                                 "TP": precio_tp,
-                                "Score": 3 if tendencia_alcista and (40 < rsi14 < 60) and (histograma_macd > hist_anterior) else 2
+                                "PerdidaUnidad": perdida_accion
                             }
                             continue
                         
@@ -287,7 +285,6 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                     rendimiento_porc = ((pr_actual - float(row["PrecioCompra"])) / float(row["PrecioCompra"])) * 100
                     emoji_rendimiento = "🟢" if rendimiento_porc >= 0 else "🔴"
                     
-                    # Llamada al calculador de balances integrado
                     info_balance = obtener_ventana_balance_estimada(t_corto)
                     
                     texto_inventario_completo += (
@@ -301,6 +298,18 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
             else:
                 texto_inventario_completo = "\n\n📌 *Posiciones Abiertas:* Ninguna posición activa en la base de datos."
                     
+            # --- AUDITORÍA HORARIA DE SEGURIDAD PARA CONSOLIDACIÓN DE VELA ---
+            hora_actual = datetime.now().time()
+            if hora_actual < datetime.strptime("15:30", "%H:%M").time():
+                advertencia_horaria = (
+                    "\n\n⏳ *⚠️ ADVERTENCIA DE RUEDA TEMPRANA:*"
+                    "\nEstás ejecutando el análisis antes de las 15:30. "
+                    "La vela diaria de hoy recién se está formando en Wall Street. "
+                    "Los indicadores técnicos (EMA/RSI) podrían cambiar al cierre de la rueda por ruido de apertura."
+                )
+            else:
+                advertencia_horaria = "\n\n📊 *CONSOLIDACIÓN:* Análisis ejecutado en hora óptima. Vela diaria madura y confirmada con bajo ruido institucional."
+
             # ------------------------------------------------------------------------
             # CASO ESCENARIO A: SÍ SE PUEDE COMPRAR (SE ENCONTRÓ CANDIDATO Y ALCANZA EL SALDO)
             # ------------------------------------------------------------------------
@@ -327,10 +336,19 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
 
                 balance_candidato = obtener_ventana_balance_estimada(mejor_opcion["Ticker"])
 
+                es_recompra = False
+                papeles_viejos = 0
+                if not df_portafolio.empty and (mejor_opcion["Ticker"] in df_portafolio["Ticker"].str.replace('.BA', '', regex=False).values):
+                    es_recompra = True
+                    papeles_viejos = int(df_portafolio[df_portafolio["Ticker"].str.replace('.BA', '', regex=False) == mejor_opcion["Ticker"]]["Cantidad"].sum())
+
+                tipo_operacion = f"🔄 *RECOMPRA / REFUERZO DE CARTERA*" if es_recompra else f"🎯 *NUEVO CEDEAR SELECCIONADO*"
+                detalle_recompra = f"\n⚠️ *Nota:* Ya tenés `{papeles_viejos}` papeles de este activo en Balanz." if es_recompra else ""
+
                 msg_tg = (
                     f"🤖 *¡Hola David! Este es tu informe cuantitativo oficial.*\n\n"
                     f"🟢 *ESTADO GENERAL:* ¡SI PODES COMPRAR!\n\n"
-                    f"🎯 *CEDEAR Recomendado:* `{mejor_opcion['Ticker']}`\n"
+                    f"{tipo_operacion}: `{mejor_opcion['Ticker']}`\n"
                     f"🛒 *Acción en Balanz:* COMPRAR exactamente `{int(mejor_opcion['Cantidad'])}` unidades.\n\n"
                     f"💵 Precio Mercado: ${mejor_opcion['Precio']:,.2f}\n"
                     f"📐 Precio Entrada Neto (c/comisión): ${mejor_opcion['Neto']:,.2f}\n"
@@ -338,8 +356,10 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                     f"🎯 ORDEN DE TAKE PROFIT: ${mejor_opcion['TakeProfit']:,.2f}\n\n"
                     f"💰 Costo Total Operación: ${mejor_opcion['Total']:,.2f}\n"
                     f"🔍 Score de Señal: {int(mejor_opcion['Score'])} / 3 Puntos.\n"
-                    f"📅 Próximo Balance del Candidato: {balance_candidato}\n\n"
-                    f"{texto_estado_billetera}"
+                    f"📅 Próximo Balance del Candidato: {balance_candidato}"
+                    f"{advertencia_horaria}"
+                    f"\n\n{texto_estado_billetera}"
+                    f"{detalle_recompra}"
                     f"{texto_inventario_completo}"
                 )
                 enviar_alerta_telegram(msg_tg)
@@ -350,7 +370,8 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
             # ------------------------------------------------------------------------
             else:
                 if detalles_bloqueo_capital:
-                    primer_tk = list(detalles_bloqueo_capital.keys())[0]
+                    df_bloqueados = pd.DataFrame.from_dict(detalles_bloqueo_capital, orient='index').sort_values(by="Score", ascending=False)
+                    primer_tk = df_bloqueados.index[0]
                     info_bloqueo = detalles_bloqueo_capital[primer_tk]
                     falta_dinero = info_bloqueo["MontoRequerido"] - capital_disponible
                     balance_bloqueado = obtener_ventana_balance_estimada(primer_tk)
@@ -364,6 +385,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                         f"💸 Costo Total Requerido: ${info_bloqueo['MontoRequerido']:,.2f}\n"
                         f"❌ Faltante de Caja: Necesitás transferir exactamente `${falta_dinero:,.2f}` a Balanz para abrir este trade.\n"
                         f"📅 Próximo Balance del Candidato: {balance_bloqueado}"
+                        f"{advertencia_horaria}"
                         f"{texto_inventario_completo}"
                     )
                     enviar_alerta_telegram(msg_bloqueo)
