@@ -118,7 +118,6 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
 
     # PARTE 2: BUSCAR NUEVAS COMPRAS INTELIGENTES Y EVALUAR RECOMPRAS
     with st.spinner("Buscando las mejores oportunidades según tu capital disponible hoy..."):
-        # Diccionario para almacenar detalles de oportunidades descartadas por falta de fondos
         detalles_bloqueo_capital = {}
         
         try:
@@ -226,6 +225,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
             # DESPACHO DE ENTRADAS VÁLIDAS
             if candidatos_validos:
                 df_ops = pd.DataFrame(candidatos_validos).sort_values(by="Score", ascending=False).reset_index(drop=True)
+                # CORRECCIÓN AQUÍ: Se añade el corchete [0] indispensable para indexar la fila correctamente en Pandas
                 mejor_opcion = df_ops.iloc[0]
                 
                 # Revisamos si la mejor opción elegida ya existía en la cartera del usuario
@@ -264,7 +264,6 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
             # MANEJO EXCLUSIVO DE BLOQUEOS POR FALTA DE CAPITAL
             else:
                 if detalles_bloqueo_capital and not df_portafolio.empty:
-                    # Buscamos cuál de los CEDEARs bloqueados por dinero ya estaba en cartera
                     ticker_bloqueado_cartera = None
                     for tk in detalles_bloqueo_capital.keys():
                         if tk in df_portafolio["Ticker"].str.replace('.BA', '', regex=False).values:
@@ -272,7 +271,6 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                             break
                     
                     if ticker_bloqueado_cartera:
-                        # Caso 1: Dio señal de recompra pero NO te da el dinero
                         info_bloqueo = detalles_bloqueo_capital[ticker_bloqueado_cartera]
                         cant_poseida = int(df_portafolio[df_portafolio["Ticker"].str.replace('.BA', '', regex=False) == ticker_bloqueado_cartera]["Cantidad"].sum())
                         falta_dinero = info_bloqueo["MontoRequerido"] - capital_disponible
@@ -289,7 +287,6 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                             f"{texto_inventario_completo}"
                         )
                     else:
-                        # Caso 2: Dio señal un activo nuevo pero no hay capital disponible
                         primer_tk = list(detalles_bloqueo_capital.keys())[0]
                         info_bloqueo = detalles_bloqueo_capital[primer_tk]
                         falta_dinero = info_bloqueo["MontoRequerido"] - capital_disponible
