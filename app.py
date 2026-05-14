@@ -17,8 +17,8 @@ TELEGRAM_CHAT_ID = "6872048498"
 
 def enviar_alerta_telegram(mensaje):
     """Módulo oficial de comunicación en red con la API de Telegram"""
-    url = f"telegram.org{TELEGRAM_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
+   url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+   payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
     try:
         r = requests.post(url, json=payload, timeout=10)
         return r.status_code == 200
