@@ -16,7 +16,7 @@ st.write("Carga tus operaciones reales de Balanz. El bot vigilará tus Stop Loss
 # Credenciales fijas y verificadas de tu canal de Telegram
 TELEGRAM_TOKEN = "8624285419:AAHS-aTMjxM9H33dqtqC4JCQzwyqqL_Q71Y"
 TELEGRAM_CHAT_ID = "6872048498"
-HORA_AUTOMATICA = "00:48"  # <-- MODIFICA ESTA HORA PARA TU TEST VELOZ
+HORA_AUTOMATICA = "00:54"  # <-- Configura acá la hora en formato 24hs para tu reporte diario automático
 
 def enviar_alerta_telegram(mensaje):
     """Módulo oficial de comunicación en red con la API de Telegram"""
@@ -34,15 +34,15 @@ def obtener_ventana_balance_estimada(ticker):
     mes_actual = ahora.month
     año_actual = ahora.year
     
-    # CORRECCIÓN DE LISTAS: Meses asignados correctamente por trimestres fiscales históricos
-    if mes_actual in [11, 12, 1]:
-        estimado = datetime(año_actual if mes_actual != 12 else año_actual + 1, 1, 25)
-    elif mes_actual in [2, 3, 4]:
+    # Listas trimestrales reparadas minuciosamente para evitar errores de sintaxis
+    if mes_actual in [1, 2, 3]:
         estimado = datetime(año_actual, 4, 25)
-    elif mes_actual in [5, 6, 7]:
+    elif mes_actual in [4, 5, 6]:
         estimado = datetime(año_actual, 7, 25)
-    else:
+    elif mes_actual in [7, 8, 9]:
         estimado = datetime(año_actual, 10, 25)
+    else:
+        estimado = datetime(año_actual + 1 if mes_actual == 12 else año_actual, 1, 25)
         
     if estimado < ahora:
         estimado += timedelta(days=90)
@@ -131,9 +131,9 @@ capital_disponible = st.sidebar.number_input("Tu Capital Total Libre ($ ARS)", m
 ratio_beneficio = st.sidebar.slider("Ratio Recompensa / Riesgo Mínimo", 1.5, 3.5, 2.0, step=0.1)
 umbral = st.sidebar.slider("Tolerancia de proximidad EMA", 0.001, 0.015, 0.005, step=0.001)
 
-# --- NÚCLEO CENTRAL AUTÓNOMO CORREGIDO PARA TRABAJAR EN SEGUNDO PLANO ---
+# --- NÚCLEO CENTRAL AUTÓNOMO ---
 def ejecutar_analisis_cuantitativo(cap_fondos, ratio_b, umb_proximidad):
-    """Ejecuta toda la lógica interna de trading sin depender del entorno visual de Streamlit"""
+    """Ejecuta toda la lógica interna de trading y envía alertas a Telegram"""
     df_actual_portafolio = pd.read_csv(ARCHIVO_DB)
     precios_vivos_cartera = {}
     riesgo_max_calculado = cap_fondos * 0.02
@@ -306,7 +306,7 @@ def ejecutar_analisis_cuantitativo(cap_fondos, ratio_b, umb_proximidad):
                 else:
                     texto_estado_billetera = f"🛑 *¡NO PODES COMPRAR MÁS PAPELES DE ESTA SEÑAL!* Rompería la regla del 2%."
             else:
-                texto_estado_billetera = f"🛑 *¡NO PODES COMPRAR MÁS PAPELES DE ESTA SEÑAL!* Se agoto el riesgo."
+                texto_estado_billetera = f"🛑 *¡NO PODES COMPRAR MÁS PAPELES DE ESTA SEÑAL!* Se agotó el riesgo."
 
             balance_candidato = obtener_ventana_balance_estimada(mejor_opcion["Ticker"])
             es_recompra = not df_actual_portafolio.empty and (mejor_opcion["Ticker"] in df_actual_portafolio["Ticker"].str.replace('.BA', '', regex=False).values)
@@ -356,7 +356,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
     else:
         st.info("Ningún CEDEAR reúne condiciones o falta saldo. Revisá Telegram.")
 
-# --- NUEVO MOTOR DE AUTOMATIZACIÓN COMPLETAMENTE SEGURO ---
+# --- MOTOR DE AUTOMATIZACIÓN EN SEGUNDO PLANO ---
 def daemon_reloj_bot():
     """Bucle paralelo en segundo plano aislado con variables estáticas seguras de resguardo"""
     ultima_fecha_ejecutada = ""
@@ -368,11 +368,10 @@ def daemon_reloj_bot():
         if hora_str == HORA_AUTOMATICA and fecha_str != ultima_fecha_ejecutada:
             # Los fines de semana el bot descansa (Mercado Cerrado)
             if ahora.weekday() < 5:
-                # Ejecuta pasándole los valores por defecto directo del disco duro, evitando hilos cruzados de Streamlit
                 ejecutar_analisis_cuantitativo(cap_fondos=158000.0, ratio_b=2.0, umb_proximidad=0.005)
             ultima_fecha_ejecutada = fecha_str
             
-        time.sleep(20) # Auditoría cada 20 segundos
+        time.sleep(15) # Auditoría cada 15 segundos
 
 if "daemon_activo" not in st.session_state:
     st.session_state["daemon_activo"] = True
