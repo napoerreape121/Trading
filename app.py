@@ -7,7 +7,11 @@ import os
 from datetime import datetime
 
 # Configuración del panel de control inteligente en internet
-st.set_page_config(page_title="Asistente Cuantitativo Pro", page_icon="🤖", layout="wide")
+st.set_page_config(
+    page_title="Asistente Cuantitativo Pro", 
+    page_icon="🤖", 
+    layout="wide"
+)
 
 st.title("🤖 Asistente de Trading de CEDEARs con Gestión Activa de Portafolio")
 st.write("Monitoreo Dinámico: El bot analiza tus posiciones abiertas y te ordena ajustar el Stop Loss o cerrar para proteger tus ganancias.")
@@ -28,7 +32,6 @@ def enviar_alerta_telegram(mensaje):
 
 # BASE DE DATOS LOCAL PERMANENTE: Inicializar o leer el archivo portafolio.csv en el disco duro
 ARCHIVO_DB = "portafolio.csv"
-
 if not os.path.exists(ARCHIVO_DB):
     df_inicial = pd.DataFrame(columns=["Ticker", "Cantidad", "PrecioCompra", "StopLoss", "TakeProfit", "FechaEntrada"])
     df_inicial.to_csv(ARCHIVO_DB, index=False)
@@ -42,7 +45,7 @@ with st.sidebar.form(key="formulario_balanz", clear_on_submit=True):
     ticker_real = st.text_input("Ticker del CEDEAR (Ej: AAPL)").upper().strip()
     if ticker_real and not ticker_real.endswith(".BA"):
         ticker_real = f"{ticker_real}.BA"
-        
+    
     cant_real = st.number_input("Cantidad de nominales comprados", min_value=1, value=1, step=1)
     precio_real = st.number_input("Precio de compra por unidad ($)", min_value=1.0, value=1000.0, step=100.0)
     sl_real = st.number_input("Stop Loss inicial ($)", min_value=0.0, value=900.0, step=100.0)
@@ -53,7 +56,8 @@ with st.sidebar.form(key="formulario_balanz", clear_on_submit=True):
     if boton_guardar and ticker_real:
         nueva_posicion = pd.DataFrame([{
             "Ticker": ticker_real, "Cantidad": int(cant_real), "PrecioCompra": float(precio_real),
-            "StopLoss": float(sl_real), "TakeProfit": float(tp_real), "FechaEntrada": datetime.now().strftime('%Y-%m-%d')
+            "StopLoss": float(sl_real), "TakeProfit": float(tp_real), 
+            "FechaEntrada": datetime.now().strftime('%Y-%m-%d')
         }])
         
         df_actualizado = pd.concat([df_portafolio, nueva_posicion], ignore_index=True)
@@ -141,12 +145,11 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                     msg_trailing = f"🔄 *¡AJUSTE DE SEGURIDAD (Trailing Stop)!*\n\n📈 El CEDEAR `{tick.split('.')[0]}` está avanzando a tu favor.\n🛠️ *Acción:* Sube tu Stop Loss en Balanz a `${nuevo_stop_sugerido:,.2f}` para asegurar tus ganancias si el precio se da vuelta."
                     enviar_alerta_telegram(msg_trailing)
                 
-                # REGLA 3: ALERTA DE DEBILIDAD ESTRUCTURAL CORREGIDA
+                # REGLA 3: ALERTA DE DEBILIDAD ESTRUCTURAL
                 elif precio_vivo < ema9_v and precio_vivo > float(row["StopLoss"]):
                     st.warning(f"⚠️ **Advertencia para {tick.split('.')[0]}:** El precio cerró por debajo de la EMA 9. La estructura de corto plazo muestra debilidad técnica.")
                     msg_debilidad = f"⚠️ *¡ADVERTENCIA DE DEBILIDAD TÉCNICA!*\n\n📉 El CEDEAR `{tick.split('.')[0]}` cerró por debajo de la EMA 9 (${precio_vivo:,.2f}).\n🛒 *Acción Sugerida:* Evalúa cerrar la posición de forma anticipada en Balanz para proteger tu capital."
                     enviar_alerta_telegram(msg_debilidad)
-                    
         except Exception as e:
             st.warning(f"No se pudo auditar dinámicamente tu portafolio: {e}. Continuando con el escáner...")
 
@@ -156,109 +159,182 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
             datos_mercado = yf.download(tickers_escaner, period="6mo", interval="1d", progress=False)
         except Exception:
             datos_mercado = None
-
-    if datos_mercado is not None and not datos_mercado.empty:
-        candidatos_validos = []
-        for ticker in tickers_escaner:
-            try:
-                if not df_portafolio.empty and ticker in df_portafolio["Ticker"].values: continue
-                
-                df_t = pd.DataFrame()
-                df_t['Close'] = datos_mercado['Close'][ticker].dropna()
-                df_t['Open'] = datos_mercado['Open'][ticker].dropna()
-                df_t['Low'] = datos_mercado['Low'][ticker].dropna()
-                df_t['High'] = datos_mercado['High'][ticker].dropna()
-                
-                precio_act = float(df_t['Close'].iloc[-1])
-                precio_ape = float(df_t['Open'].iloc[-1])
-                precio_min = float(df_t['Low'].iloc[-1])
-                
-                ema9 = df_t['Close'].ewm(span=9, adjust=False).mean().iloc[-1]
-                ema50 = df_t['Close'].ewm(span=50, adjust=False).mean().iloc[-1]
-                
-                high_low = df_t['High'] - df_t['Low']
-                high_close_prev = abs(df_t['High'] - df_t['Close'].shift())
-                low_close_prev = abs(df_t['Low'] - df_t['Close'].shift())
-                true_range = pd.concat([high_low, high_close_prev, low_close_prev], axis=1).max(axis=1)
-                atr14 = true_range.rolling(14).mean().iloc[-1]
-                
-                delta = df_t['Close'].diff()
-                gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-                loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-                rsi14 = 100 - (100 / (1 + (gain / loss))).iloc[-1]
-                
-                exp1 = df_t['Close'].ewm(span=12, adjust=False).mean()
-                exp2 = df_t['Close'].ewm(span=26, adjust=False).mean()
-                histograma_macd = (exp1 - exp2 - (exp1 - exp2).ewm(span=9, adjust=False).mean()).iloc[-1]
-                hist_anterior = (exp1 - exp2 - (exp1 - exp2).ewm(span=9, adjust=False).mean()).iloc[-2]
-                
-                es_vela_verde = precio_act > precio_ape
-                tendencia_alcista = precio_act > ema50
-                toca_ema9 = abs(precio_min - ema9) / precio_act <= umbral
-                toca_ema50 = abs(precio_min - ema50) / precio_act <= umbral
-                
-                disparar = False
-                ema_ref = ema50
-                if tendencia_alcista and es_vela_verde and (toca_ema9 or toca_ema50):
-                    disparar = True
-                    ema_ref = ema50 if toca_ema50 else ema9
-                elif not tendencia_alcista and es_vela_verde and toca_ema9 and rsi14 <= 55:
-                    disparar = True
-                    ema_ref = ema9
-
-                if disparar:
-                    precio_ent_neto = precio_act * (1 + COSTO_OPERATIVO_TOTAL)
-                    sl_g = ema_ref - (2 * atr14)
-                    if sl_g >= precio_act * 0.97: 
-                        sl_g = precio_act * 0.97
-                    precio_sal_sl_neto = sl_g * (1 - COSTO_OPERATIVO_TOTAL)
-                    
-                    dist_riesgo = (precio_ent_neto - precio_sal_sl_neto) / precio_ent_neto
-                    precio_tp = precio_act * (1 + (dist_riesgo * ratio_beneficio))
-                    
-                    perdida_accion = precio_ent_neto - precio_sal_sl_neto
-                    cant_cedears = int(riesgo_maximo_ars // perdida_accion)
-                    
-                    if cant_cedears <= 0: continue
-                    monto_compra = precio_ent_neto * cant_cedears
-                    if monto_compra > capital_disponible or precio_ent_neto > capital_disponible: continue
-                    
-                    score = 0
-                    if 40 < rsi14 < 60: score += 1
-                    if histograma_macd > hist_anterior: score += 1
-                    if tendencia_alcista: score += 1
-                    
-                    candidatos_validos.append({
-                        "Ticker": ticker, "Precio": precio_act, "Neto": precio_ent_neto,
-                        "StopLoss": sl_g, "TakeProfit": precio_tp, "Cantidad": cant_cedears,
-                        "Total": monto_compra, "Score": score
-                    })
-            except Exception:
-                continue
-
-        if candidatos_validos:
-            df_ops = pd.DataFrame(candidatos_validos).sort_values(by="Score", ascending=False).reset_index(drop=True)
-            mejor_opcion = df_ops.iloc[0]
             
-            st.success("🤖 ¡Análisis de Oportunidades Completado!")
-            st.subheader("🎯 La Mejor Decisión Sugerida por el Cerebro Cuantitativo")
-            col_a, col_b, col_c = st.columns(3)
-            col_a.metric("CEDEAR", mejor_opcion["Ticker"])
-            col_b.metric("Cantidad de Nominales", int(mejor_opcion["Cantidad"]))
-            col_c.metric("Capital Invertido Neto", f"$ {mejor_opcion['Total']:,.2f}")
-            
-            msg_tg = (
-                f"🤖 *¡ASIGNACIÓN DE CAPITAL REALISTA EN APERTURA!*\n\n"
-                f"🎯 *CEDEAR Seleccionado:* `{mejor_opcion['Ticker']}`\n"
-                f"🧮 *Cantidad nominal a comprar:* {int(mejor_opcion['Cantidad'])} unidades\n\n"
-                f"💵 *Precio Pantalla:* ${mejor_opcion['Precio']:,.2f}\n"
-                f"📐 *Precio Entrada Neto:* ${mejor_opcion['Neto']:,.2f}\n"
-                f"🛡️ *ORDEN DE STOP LOSS:* ${mejor_opcion['StopLoss']:,.2f}\n"
-                f"🎯 *ORDEN DE TAKE PROFIT:* ${mejor_opcion['TakeProfit']:,.2f}\n\n"
-                f"💰 *Costo Total:* ${mejor_opcion['Total']:,.2f}\n"
-                f"🔍 *Score de Calidad:* {int(mejor_opcion['Score'])} / 3 Puntos."
-            )
-            enviar_alerta_telegram(msg_tg)
-            st.dataframe(df_ops, use_container_width=True)
+        if datos_mercado is not None and not datos_mercado.empty:
+            candidatos_validos = []
+            for ticker in tickers_escaner:
+                try:
+                    if not df_portafolio.empty and ticker in df_portafolio["Ticker"].values: 
+                        continue
+                    
+                    df_t = pd.DataFrame()
+                    df_t['Close'] = datos_mercado['Close'][ticker].dropna()
+                    df_t['Open'] = datos_mercado['Open'][ticker].dropna()
+                    df_t['Low'] = datos_mercado['Low'][ticker].dropna()
+                    df_t['High'] = datos_mercado['High'][ticker].dropna()
+                    
+                    precio_act = float(df_t['Close'].iloc[-1])
+                    precio_ape = float(df_t['Open'].iloc[-1])
+                    precio_min = float(df_t['Low'].iloc[-1])
+                    
+                    ema9 = df_t['Close'].ewm(span=9, adjust=False).mean().iloc[-1]
+                    ema50 = df_t['Close'].ewm(span=50, adjust=False).mean().iloc[-1]
+                    
+                    high_low = df_t['High'] - df_t['Low']
+                    high_close_prev = abs(df_t['High'] - df_t['Close'].shift())
+                    low_close_prev = abs(df_t['Low'] - df_t['Close'].shift())
+                    true_range = pd.concat([high_low, high_close_prev, low_close_prev], axis=1).max(axis=1)
+                    atr14 = true_range.rolling(14).mean().iloc[-1]
+                    
+                    delta = df_t['Close'].diff()
+                    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+                    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+                    rsi14 = 100 - (100 / (1 + (gain / loss))).iloc[-1]
+                    
+                    exp1 = df_t['Close'].ewm(span=12, adjust=False).mean()
+                    exp2 = df_t['Close'].ewm(span=26, adjust=False).mean()
+                    histograma_macd = (exp1 - exp2 - (exp1 - exp2).ewm(span=9, adjust=False).mean()).iloc[-1]
+                    hist_anterior = (exp1 - exp2 - (exp1 - exp2).ewm(span=9, adjust=False).mean()).iloc[-2]
+                    
+                    es_vela_verde = precio_act > precio_ape
+                    tendencia_alcista = precio_act > ema50
+                    toca_ema9 = abs(precio_min - ema9) / precio_act <= umbral
+                    toca_ema50 = abs(precio_min - ema50) / precio_act <= umbral
+                    
+                    disparar = False
+                    ema_ref = ema50
+                    if tendencia_alcista and es_vela_verde and (toca_ema9 or toca_ema50):
+                        disparar = True
+                        ema_ref = ema50 if toca_ema50 else ema9
+                    elif not tendencia_alcista and es_vela_verde and toca_ema9 and rsi14 <= 55:
+                        disparar = True
+                        ema_ref = ema9
+                        
+                    if disparar:
+                        precio_ent_neto = precio_act * (1 + COSTO_OPERATIVO_TOTAL)
+                        sl_g = ema_ref - (2 * atr14)
+                        if sl_g >= precio_act * 0.97: 
+                            sl_g = precio_act * 0.97
+                        precio_sal_sl_neto = sl_g * (1 - COSTO_OPERATIVO_TOTAL)
+                        
+                        dist_riesgo = (precio_ent_neto - precio_sal_sl_neto) / precio_ent_neto
+                        precio_tp = precio_act * (1 + (dist_riesgo * ratio_beneficio))
+                        
+                        perdida_accion = precio_ent_neto - precio_sal_sl_neto
+                        cant_cedears = int(riesgo_maximo_ars // perdida_accion)
+                        
+                        if cant_cedears <= 0: 
+                            continue
+                        monto_compra = precio_ent_neto * cant_cedears
+                        if monto_compra > capital_disponible or precio_ent_neto > capital_disponible: 
+                            continue
+                        
+                        score = 0
+                        if 40 < rsi14 < 60: score += 1
+                        if histograma_macd > hist_anterior: score += 1
+                        if tendencia_alcista: score += 1
+                        
+                        candidatos_validos.append({
+                            "Ticker": ticker, "Precio": precio_act, "Neto": precio_ent_neto,
+                            "StopLoss": sl_g, "TakeProfit": precio_tp, 
+                            "Cantidad": cant_cedears, "Total": monto_compra, "Score": score
+                        })
+                except Exception:
+                    continue
+                    
+            if candidatos_validos:
+                df_ops = pd.DataFrame(candidatos_validos).sort_values(by="Score", ascending=False).reset_index(drop=True)
+                mejor_opcion = df_ops.iloc[0]
+                
+                st.success("🤖 ¡Análisis de Oportunidades Completado!")
+                st.subheader("🎯 La Mejor Decisión Sugerida por el Cerebro Cuantitativo")
+                col_a, col_b, col_c = st.columns(3)
+                col_a.metric("CEDEAR", mejor_opcion["Ticker"])
+                col_b.metric("Cantidad de Nominales", int(mejor_opcion["Cantidad"]))
+                col_c.metric("Capital Invertido Neto", f"$ {mejor_opcion['Total']:,.2f}")
+                
+                msg_tg = (
+                    f"🤖 *¡ASIGNACIÓN DE CAPITAL REALISTA EN APERTURA!*\n\n"
+                    f"🎯 *CEDEAR Seleccionado:* `{mejor_opcion['Ticker']}`\n"
+                    f"🤖 *Cantidad nominal a comprar:* {int(mejor_opcion['Cantidad'])} unidades\n\n"
+                    f"💵 *Precio Pantalla:* ${mejor_opcion['Precio']:,.2f}\n"
+                    f"📐 *Precio Entrada Neto:* ${mejor_opcion['Neto']:,.2f}\n"
+                    f"🛡️ *ORDEN DE STOP LOSS:* ${mejor_opcion['StopLoss']:,.2f}\n"
+                    f"🎯 *ORDEN DE TAKE PROFIT:* ${mejor_opcion['TakeProfit']:,.2f}\n\n"
+                    f"💰 *Costo Total:* ${mejor_opcion['Total']:,.2f}\n"
+                    f"🔍 *Score de Calidad:* {int(mejor_opcion['Score'])} / 3 Puntos."
+                )
+                enviar_alerta_telegram(msg_tg)
+                st.dataframe(df_ops, use_container_width=True)
+            else:
+                st.info("Ningún CEDEAR reúne las condiciones técnicas en la rueda en vivo de hoy.")
+
+# =====================================================================
+# 💬 NUEVO MÓDULO: PANEL DE PREGUNTAS INTERACTIVAS (CHATBOT)
+# =====================================================================
+st.markdown("---")
+st.subheader("💬 Consulta a tu Cerebro Cuantitativo")
+st.write("Hazle preguntas sobre tus posiciones abiertas o métricas actuales.")
+
+# Inicializar el historial de conversación en la memoria de la sesión para evitar borrados
+if "historial_chat" not in st.session_state:
+    st.session_state.historial_chat = []
+
+# Mostrar el historial acumulado en pantalla
+for mensaje in st.session_state.historial_chat:
+    with st.chat_message(mensaje["rol"]):
+        st.write(mensaje["contenido"])
+
+# Capturar la entrada de texto del usuario
+if pregunta_usuario := st.chat_input("Escribe aquí (Ej: ¿cuántas posiciones tengo?, ¿cuál es mi riesgo?)"):
+    
+    # Mostrar la pregunta del usuario inmediatamente
+    with st.chat_message("user"):
+        st.write(pregunta_usuario)
+    st.session_state.historial_chat.append({"rol": "user", "contenido": pregunta_usuario})
+    
+    # Procesar la entrada
+    pregunta_clean = pregunta_usuario.lower().strip()
+    respuesta_bot = ""
+    
+    # Lógica de extracción de datos dinámicos del script
+    if "posición" in pregunta_clean or "posiciones" in pregunta_clean or "portafolio" in pregunta_clean:
+        if not df_portafolio.empty:
+            cant_activos = len(df_portafolio)
+            lista_tickers = ", ".join(df_portafolio["Ticker"].tolist())
+            respuesta_bot = f"📊 Actualmente tenés **{cant_activos} posiciones abiertas**: `{lista_tickers}`. Encontrás los detalles tabulados arriba."
         else:
-            st.info("Ningún CEDEAR reúne las condiciones técnicas en la rueda en vivo de hoy.")
+            respuesta_bot = "📋 Tu portafolio de vigilancia permanente se encuentra vacío en este momento."
+            
+    elif "riesgo" in pregunta_clean or "capital" in pregunta_clean:
+        respuesta_bot = (
+            f"💰 **Monitoreo Financiero Activo:**\n\n"
+            f"* **Capital libre configurado:** ${capital_disponible:,.2f} ARS\n"
+            f"* **Riesgo máximo por operación (2%):** ${riesgo_maximo_ars:,.2f} ARS\n"
+            f"* **Ratio Recompensa/Riesgo mínimo:** {ratio_beneficio}x"
+        )
+        
+    elif "parámetros" in pregunta_clean or "configuración" in pregunta_clean or "ema" in pregunta_clean:
+        respuesta_bot = (
+            f"⚙️ **Parámetros Técnicos del Escáner:**\n\n"
+            f"* **Tolerancia de proximidad EMA:** {umbral}\n"
+            f"* **Costo operativo total considerado:** {COSTO_OPERATIVO_TOTAL:.4%}"
+        )
+        
+    elif "hola" in pregunta_clean or "ayuda" in pregunta_clean or "clear" in pregunta_clean:
+        respuesta_bot = (
+            "👋 ¡Hola! Soy tu asistente cuantitativo de control. Podés consultarme sobre:\n"
+            "* *'¿Qué posiciones tengo abiertas?'*\n"
+            "* *'¿Cuál es mi capital y riesgo?'*\n"
+            "* *'¿Qué parámetros usa el escáner?'*"
+        )
+    else:
+        respuesta_bot = (
+            "🤖 Entiendo tu consulta, pero actualmente solo puedo responder sobre las variables cargadas en tu panel operativo. "
+            "Si querés forzar un escaneo de mercado, recordá presionar el botón **'🚀 Ejecutar Escáner General'**."
+        )
+        
+    # Mostrar la respuesta del bot en el contenedor visual
+    with st.chat_message("assistant"):
+        st.write(respuesta_bot)
+    st.session_state.historial_chat.append({"rol": "assistant", "contenido": respuesta_bot})
