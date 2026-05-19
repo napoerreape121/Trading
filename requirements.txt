@@ -1,4 +1,4 @@
-pandas<2.2.0
+pandas
 yfinance
 streamlit
-git+https://github.com
+ta
