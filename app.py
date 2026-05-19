@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import yfinance as yf
-import pandas_ta as ta
+import ta
 
 # Configuración de la página web de la App
 st.set_page_config(page_title="CEDEARs Signal Bot", page_icon="🤖", layout="wide")
@@ -50,7 +50,6 @@ if st.button("🚀 Iniciar Escaneo de Mercado en Vivo"):
     
     st.info("Escaneando las cotizaciones de BYMA en Yahoo Finanzas. Esto puede demorar un momento...")
     
-    # Contenedor para ir mostrando las alertas encontradas
     alertas_encontradas = 0
     
     for ticker in lista_cedears:
@@ -62,15 +61,13 @@ if st.button("🚀 Iniciar Escaneo de Mercado en Vivo"):
                 
             df.columns = [col if isinstance(col, tuple) else col for col in df.columns]
             
-            # CÁLCULO DE INDICADORES
-            df['EMA_9'] = ta.ema(df['Close'], length=9)
-            df['EMA_50'] = ta.ema(df['Close'], length=50)
-            df['RSI'] = ta.rsi(df['Close'], length=14)
-            df['ATR'] = ta.atr(df['High'], df['Low'], df['Close'], length=14)
-            df['Volumen_SMA_9'] = ta.sma(df['Volume'], length=9)
-            
-            macd_df = ta.macd(df['Close'], fast=12, slow=26, signal=9)
-            df['MACD_hist'] = macd_df['MACDh_12_26_9']
+            # CÁLCULO DE INDICADORES CON LIBRERÍA 'TA'
+            df['EMA_9'] = ta.trend.ema_indicator(df['Close'], window=9)
+            df['EMA_50'] = ta.trend.ema_indicator(df['Close'], window=50)
+            df['RSI'] = ta.momentum.rsi(df['Close'], window=14)
+            df['ATR'] = ta.volatility.average_true_range(df['High'], df['Low'], df['Close'], window=14)
+            df['Volumen_SMA_9'] = ta.trend.sma_indicator(df['Volume'], window=9)
+            df['MACD_hist'] = ta.trend.macd_diff(df['Close'], window_fast=12, window_slow=26, window_sign=9)
             
             # Últimas velas cerradas
             ultima_vela = df.iloc[-2]
@@ -106,7 +103,7 @@ if st.button("🚀 Iniciar Escaneo de Mercado en Vivo"):
                 
                 precio_neto_entrada = precio_bruto_entrada + arancel + derechos_mercado + iva
                 precio_stop_loss = precio_neto_entrada - (2 * atr_actual)
-                distancia_sl_pesos = precio_neto_entrada - precio_stop_loss
+                distancia_sl_pesos = precio_neto_entrada - price_stop_loss if 'price_stop_loss' in locals() else precio_neto_entrada - precio_stop_loss
                 
                 # Triángulo de Hierro
                 dinero_en_riesgo_maximo = capital_total * RIESGO_MAXIMO_POR_OPERACION
@@ -120,7 +117,6 @@ if st.button("🚀 Iniciar Escaneo de Mercado en Vivo"):
                 if cantidad_nominales > 0:
                     alertas_encontradas += 1
                     
-                    # Dibujar tarjeta visual de la señal
                     with st.container():
                         st.success(f"🟢 SEÑAL DE COMPRA DETECTADA: **{ticker}**")
                         col1, col2, col3 = st.columns(3)
@@ -144,4 +140,5 @@ if st.button("🚀 Iniciar Escaneo de Mercado en Vivo"):
     else:
         st.balloons()
         st.success(f"¡Escaneo finalizado! Se encontraron {alertas_encontradas} señales activas.")
+
 
