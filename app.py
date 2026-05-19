@@ -102,7 +102,7 @@ if st.button("🚀 Iniciar Escaneo de Mercado en Vivo"):
                 # Desglose Balanz
                 arancel = precio_bruto_entrada * PORCENTAJE_COMISION
                 derechos_mercado = precio_bruto_entrada * PORCENTAJE_DERECHOS_MERCADO
-                iva = (arancel + derechos_market) * PORCENTAJE_IVA if 'derechos_market' in locals() else (arancel + derechos_mercado) * PORCENTAJE_IVA
+                iva = (arancel + derechos_mercado) * PORCENTAJE_IVA
                 
                 precio_neto_entrada = precio_bruto_entrada + arancel + derechos_mercado + iva
                 precio_stop_loss = precio_neto_entrada - (2 * atr_actual)
@@ -140,7 +140,8 @@ if st.button("🚀 Iniciar Escaneo de Mercado en Vivo"):
             continue
             
     if alertas_encontradas == 0:
-        st.warning("Escaner completo: No se encontraron activos que cumplan el 100% de las condiciones en este momento.")
+        st.warning("Escaneo completo: No se encontraron activos que cumplan el 100% de las condiciones en este momento.")
     else:
         st.balloons()
         st.success(f"¡Escaneo finalizado! Se encontraron {alertas_encontradas} señales activas.")
+
