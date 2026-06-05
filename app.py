@@ -486,4 +486,4 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
 
     if portafolio_modificado:
         st.subheader("📋 Portafolio actualizado tras la gestión")
-        st.dataframe(df_portafolio_activo, use_conta
+        st.dataframe(df_portafolio_activo, use_container_width=True)
