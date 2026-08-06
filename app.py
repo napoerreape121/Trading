@@ -24,8 +24,9 @@ st.title("🤖 Asistente de Trading de CEDEARs - Confluencias Estrictas")
 st.write("Monitoreo y Escáner Algorítmico basado en reglas cuantitativas sin subjetividad.")
 
 # Variables de entorno para comunicación
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8624285419:AAHS-aTMjxM9H33dqtqC4JCQzwyqqL_Q71Y")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "6872048498")
+TELEGRAM_TOKEN = st.secrets.get("TELEGRAM_TOKEN", "8624285419:AAHS-aTMjxM9H33dqtqC4JCQzwyqqL_Q71Y")
+TELEGRAM_CHAT_ID = st.secrets.get("TELEGRAM_CHAT_ID", "6872048498")
+
 
 def enviar_alerta_telegram(mensaje):
     url = f"https://telegram.org{TELEGRAM_TOKEN}/sendMessage"
