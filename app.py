@@ -42,6 +42,15 @@ def precio_compra_neto(precio_bruto):
 def precio_venta_neto(precio_bruto):
     return precio_bruto * (1 - COSTO_OPERATIVO_TOTAL)
 
+# Botón de prueba temporal (Pégalo al final de la Parte 1 para verificar conectividad)
+if st.sidebar.button("🧪 Probar Conexión de Telegram"):
+    resultado = enviar_alerta_telegram("¡Conexión exitosa! El bot cuantitativo está en línea.")
+    if resultado:
+        st.sidebar.success("¡Alerta enviada! Revisá tu Telegram.")
+    else:
+        st.sidebar.error("Error de envío. Revisá el Token, el Chat ID o los Secrets en Streamlit.")
+
+
 def extraer_ohlc(datos, ticker):
     if datos is None or datos.empty:
         raise ValueError(f"Sin datos de mercado para {ticker}")
