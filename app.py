@@ -23,12 +23,13 @@ st.set_page_config(page_title="Asistente Cuantitativo Pro", page_icon="🤖", la
 st.title("🤖 Asistente de Trading de CEDEARs con Gestión Activa de Portafolio")
 st.write(
     "Sistema Cuantitativo Estricto: El bot filtra oportunidades usando confluencias de Tendencia (EMA 200), "
-    "Momentum (MACD + RSI) y Gatillos de Volumen."
+    "Momentum (MACD + RSI), Estructura (Soporte/Resistencia 20d) y Gatillos de Volumen."
 )
 
 # Uso de st.secrets (buenas prácticas de seguridad) con fallback a variables de entorno
 TELEGRAM_TOKEN = st.secrets.get("TELEGRAM_TOKEN", os.environ.get("TELEGRAM_TOKEN", "8624285419:AAHS-aTMjxM9H33dqtqC4JCQzwyqqL_Q71Y"))
 TELEGRAM_CHAT_ID = st.secrets.get("TELEGRAM_CHAT_ID", os.environ.get("TELEGRAM_CHAT_ID", "6872048498"))
+
 
 def enviar_alerta_telegram(mensaje):
     """Módulo oficial de comunicación en red con la API de Telegram"""
@@ -40,11 +41,14 @@ def enviar_alerta_telegram(mensaje):
     except Exception:
         return False
 
+
 def precio_compra_neto(precio_bruto):
     return precio_bruto * (1 + COSTO_OPERATIVO_TOTAL)
 
+
 def precio_venta_neto(precio_bruto):
     return precio_bruto * (1 - COSTO_OPERATIVO_TOTAL)
+
 
 def extraer_ohlc(datos, ticker):
     """Extrae OHLC y Volumen, compatible con descargas de 1 o N tickers en yfinance."""
@@ -74,6 +78,7 @@ def extraer_ohlc(datos, ticker):
         raise ValueError(f"Datos insuficientes para {ticker} ({len(sub)} velas, se requieren {MIN_VELAS})")
     return sub
 
+
 @st.cache_data(ttl=900)  # Evita bloqueos de Yahoo Finance almacenando datos en caché por 15 min
 def descargar_mercado(tickers, period="2y"): # 2 años garantiza historial para la EMA200
     if isinstance(tickers, str):
@@ -91,8 +96,10 @@ def descargar_mercado(tickers, period="2y"): # 2 años garantiza historial para 
         raise ValueError("yfinance no devolvió datos")
     return datos
 
+
 def guardar_portafolio(df):
     df.to_csv(ARCHIVO_DB, index=False)
+
 
 def cargar_portafolio():
     if not os.path.exists(ARCHIVO_DB):
@@ -102,6 +109,7 @@ def cargar_portafolio():
         return df
     df["Ticker"] = df["Ticker"].astype(str).str.strip().str.upper()
     return df
+
 
 def registrar_cierre(row, motivo, precio_cierre):
     registro = pd.DataFrame([{
@@ -122,6 +130,7 @@ def registrar_cierre(row, motivo, precio_cierre):
     else:
         registro.to_csv(ARCHIVO_HISTORIAL, index=False)
 
+
 def normalizar_ticker(ticker):
     ticker = (ticker or "").strip().upper()
     if not ticker:
@@ -129,6 +138,7 @@ def normalizar_ticker(ticker):
     if not ticker.endswith(".BA"):
         ticker = f"{ticker}.BA"
     return ticker
+
 
 def validar_operacion(precio, sl, tp):
     if sl <= 0 or tp <= 0 or precio <= 0:
@@ -296,7 +306,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
     # ==========================================
     # PARTE 2: BUSCADOR CUANTITATIVO DE CONFLUENCIAS
     # ==========================================
-    with st.spinner("Ejecutando algoritmo de confluencias estrictas..."):
+    with st.spinner("Ejecutando algoritmo de confluencias estrictas con validación estructural..."):
         try:
             datos_mercado = descargar_mercado(tickers_escaner, period="2y")
         except Exception as e:
@@ -315,15 +325,19 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
             try:
                 df_t = extraer_ohlc(datos_mercado, ticker)
 
-                # Cálculo de Indicadores con librería 'ta' para asegurar integridad matemática
+                # Cálculo de Indicadores de Tendencia y Momentum (ta)
                 df_t["EMA_9"] = ta.trend.ema_indicator(df_t["Close"], window=9)
                 df_t["EMA_200"] = ta.trend.ema_indicator(df_t["Close"], window=200)
                 df_t["RSI_14"] = ta.momentum.rsi(df_t["Close"], window=14)
                 df_t["MACD_Hist"] = ta.trend.MACD(df_t["Close"]).macd_diff()
                 df_t["ATR_14"] = ta.volatility.average_true_range(df_t["High"], df_t["Low"], df_t["Close"], window=14)
                 df_t["Volumen_SMA_9"] = df_t["Volume"].rolling(window=9).mean()
+                
+                # Cálculo de Estructura de Mercado (Soporte/Resistencia de 20 períodos)
+                df_t["Soporte_20"] = df_t["Low"].rolling(window=20).min()
+                df_t["Resistencia_20"] = df_t["High"].rolling(window=20).max()
 
-                # Descartar si quedan NaNs (activos recientes sin historial suficiente para EMA 200)
+                # Limpieza estricta: Descartamos filas sin data suficiente para los indicadores (Ej. EMA 200)
                 df_t = df_t.dropna()
                 if len(df_t) < 2:
                     continue
@@ -344,14 +358,32 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                 Volumen_SMA_9 = last["Volumen_SMA_9"]
                 ATR_Actual = last["ATR_14"]
 
+                # Extraemos Niveles Estructurales previos al cierre actual
+                Soporte = prev["Soporte_20"] 
+                Resistencia = prev["Resistencia_20"] 
+
                 # -------------------------------------------------------------
-                # 2. NUEVA LÓGICA DE GATILLO BOOLEANA ESTRICTA
+                # 2. SISTEMA DE GATILLOS BOOLEANOS (CONFLUENCIAS)
                 # -------------------------------------------------------------
+                # Condición 1: Tendencia Alcista Principal
                 Condicion_Tendencia = (Precio_Cierre > EMA_200)
+                
+                # Condición 2: Momentum Acelerando a favor
                 Condicion_Momentum = (Precio_Cierre > EMA_9) and (MACD_Hist_Actual > MACD_Hist_Previo) and (40 < RSI_Actual < 65)
+                
+                # Condición 3: Señal de Compra Intradiaria Fuerte
                 Condicion_Gatillo = (Precio_Cierre > Precio_Apertura) and (Volumen_Actual > Volumen_SMA_9)
                 
-                SEÑAL_COMPRA = Condicion_Tendencia and Condicion_Momentum and Condicion_Gatillo
+                # Condición 4: Estructura de Pullback y Riesgo/Beneficio
+                Toco_Soporte = (last["Low"] <= Soporte * 1.02) and (last["Low"] >= Soporte * 0.98)
+                Distancia_Resistencia = Resistencia - Precio_Cierre
+                Distancia_Soporte = Precio_Cierre - Soporte
+                Camino_Libre = Distancia_Resistencia >= (Distancia_Soporte * 1.5)
+                
+                Condicion_Estructura = Toco_Soporte and Camino_Libre
+
+                # SEÑAL DEFINITIVA
+                SEÑAL_COMPRA = Condicion_Tendencia and Condicion_Momentum and Condicion_Gatillo and Condicion_Estructura
 
                 if not SEÑAL_COMPRA:
                     continue
@@ -365,7 +397,6 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                 
                 Riesgo_por_Accion = Precio_Neto_Entrada - Stop_Loss
 
-                # Filtro de cordura: si por alguna razón el ATR causa un stop loss negativo o irracional
                 if Stop_Loss <= 0 or Riesgo_por_Accion <= 0:
                     continue
 
@@ -387,18 +418,16 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                 })
 
             except Exception:
-                # Si falla un ticker particular (ej. deslistado o sin volumen), pasamos al siguiente
                 continue
 
         # -------------------------------------------------------------
         # 4. FORMATO DE SALIDA (Telegram y Streamlit)
         # -------------------------------------------------------------
         if candidatos_validos:
-            # Ordenamos para mostrar la oportunidad de mayor peso nominal que encaje en el presupuesto
             df_ops = pd.DataFrame(candidatos_validos).sort_values(by="CostoTotal", ascending=False).reset_index(drop=True)
             mejor_opcion = df_ops.iloc[0]
 
-            st.success("🎯 ¡Sistema de Confluencias Activado! Se ha detectado una oportunidad de Alta Probabilidad.")
+            st.success("🎯 ¡Sistema de Confluencias Activado! Se ha detectado una oportunidad de Alta Probabilidad estructural.")
             
             col_a, col_b, col_c = st.columns(3)
             col_a.metric("CEDEAR", mejor_opcion["Ticker"])
@@ -407,19 +436,18 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
 
             st.dataframe(df_ops, use_container_width=True)
 
-            # Mensaje Telegram con formato estricto solicitado
             msg_tg = (
-                f"🟩 *SEÑAL DE COMPRA CONFIRMADA* 🟩\n\n"
+                f"🟩 *SEÑAL DE COMPRA CONFIRMADA (FRANCOTIRADOR)* 🟩\n\n"
                 f"📌 *Ticker:* `{mejor_opcion['Ticker']}`\n"
                 f"⚖️ *Cantidad de nominales:* {int(mejor_opcion['Cantidad'])} *(Riesgo 2% del capital)*\n"
                 f"💲 *Precio de Entrada Neto:* `${mejor_opcion['PrecioNetoEntrada']:,.2f}`\n\n"
                 f"⛔ *Stop Loss sugerido:* `${mejor_opcion['StopLoss']:,.2f}`\n"
                 f"🎯 *Target de salida (Ratio 1:2):* `${mejor_opcion['Target']:,.2f}`\n\n"
-                f"✅ _Confluencias: Tendencia (EMA200) + Momentum (EMA9/RSI/MACD) + Gatillo (Volumen/Apertura)._"
+                f"✅ _Confluencias: Tendencia (EMA200) + Momentum + Rebote en Soporte 20d + Camino Libre hacia Resistencia._"
             )
             enviar_alerta_telegram(msg_tg)
         else:
-            st.info("Ningún CEDEAR superó el algoritmo de confluencias estrictas en la sesión actual. Protegiendo capital.")
+            st.info("Ningún CEDEAR superó el filtro de francotirador en la sesión actual. Protegiendo capital.")
 
     if portafolio_modificado:
         st.subheader("📋 Portafolio actualizado tras la gestión")
