@@ -233,6 +233,7 @@ if st.button(f"🧪 Iniciar Simulación con Capital Limitado ({opcion_tiempo})")
                                 continue
                             
                             efectivo -= costo_total
+                            # CORRECCIÓN CLAVE: La fecha de entrada real es la apertura de fecha_manana
                             posiciones_activas[tick] = {
                                 "PrecioCompraNeto": p_neto_entrada,
                                 "StopLoss": stop_loss,
@@ -326,7 +327,6 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
                     if not pd.isna(trade_info["TP Inicial"]):
                         fig.add_trace(go.Scatter(x=[f_compra, f_venta], y=[trade_info["TP Inicial"], trade_info["TP Inicial"]], line=dict(color='green', dash='dash'), name="Take Profit"))
                     
-                    # Forzamos la ubicación exacta usando el precio de apertura de la vela de compra en el eje X real
                     fig.add_annotation(x=f_compra, y=trade_info["Precio Compra ($)"], text="📥 COMPRA", showarrow=True, arrowhead=2, arrowcolor="blue", xanchor="center", yanchor="bottom", bgcolor="blue", font=dict(color="white"))
                     fig.add_annotation(x=f_venta, y=trade_info["Precio Salida ($)"], text=f"📤 {trade_info['Resultado']}", showarrow=True, arrowhead=2, arrowcolor="purple", xanchor="center", yanchor="top", bgcolor="purple", font=dict(color="white"))
                     
