@@ -9,13 +9,13 @@ import ta
 # 🛠️ CONFIGURACIÓN DE LA PÁGINA
 # =====================================================================
 st.set_page_config(
-    page_title="Simulador Cuantitativo de Alto Rendimiento", 
+    page_title="Simulador Cuantitativo de Seguimiento de Tendencia", 
     page_icon="🚀", 
     layout="wide"
 )
 
-st.title("🚀 Simulador Cuantitativo: Versión de Alto Rendimiento (Objetivo 1:3)")
-st.markdown("Estrategia optimizada con ratio de beneficio expandido y filtros de aceleración de volumen.")
+st.title("🚀 Simulador Cuantitativo: Seguimiento de Tendencia Dinámico")
+st.markdown("Estrategia basada en cruce de medias y salida inteligente por debilitamiento de tendencia para maximizar retornos.")
 
 # =====================================================================
 # 📋 UNIVERSO DE ACTIVOS (CEDEARs)
@@ -65,10 +65,10 @@ if "diccionario_precios_historicos" not in st.session_state:
     st.session_state.diccionario_precios_historicos = {}
 
 # =====================================================================
-# 🚀 MOTOR DE BACKTESTING DE ALTO RENDIMIENTO
+# 🚀 MOTOR DE BACKTESTING DE TENDENCIA DINÁMICA
 # =====================================================================
-if st.button(f"🚀 Ejecutar Simulación de Alto Rendimiento ({opcion_tiempo})"):
-    with st.spinner(f"Descargando datos y procesando con objetivo 1:3..."):
+if st.button(f"🚀 Ejecutar Simulación Dinámica ({opcion_tiempo})"):
+    with st.spinner(f"Descargando datos y procesando estrategia de seguimiento..."):
         try:
             full_tickers = tickers + ['SPY.BA']
             datos_globales = yf.download(full_tickers, period=periodo_download, interval="1d", progress=False)
@@ -103,11 +103,11 @@ if st.button(f"🚀 Ejecutar Simulación de Alto Rendimiento ({opcion_tiempo})")
                     continue
                 
                 df['EMA_9'] = ta.trend.ema_indicator(df['Close'], window=9)
+                df['EMA_21'] = ta.trend.ema_indicator(df['Close'], window=21)
                 df['EMA_200'] = ta.trend.ema_indicator(df['Close'], window=200)
                 df['RSI_14'] = ta.momentum.rsi(df['Close'], window=14)
-                df['MACD_Hist'] = ta.trend.MACD(df['Close']).macd_diff()
                 df['ATR_14'] = ta.volatility.average_true_range(df['High'], df['Low'], df['Close'], window=14)
-                df['Vol_SMA_9'] = df['Volume'].rolling(window=9).mean()
+                df['Vol_SMA_20'] = df['Volume'].rolling(window=20).mean()
                 
                 df = df.dropna()
                 df.index = pd.to_datetime(df.index).normalize()
@@ -143,23 +143,23 @@ if st.button(f"🚀 Ejecutar Simulación de Alto Rendimiento ({opcion_tiempo})")
                     if fecha_manana in df_activo.index:
                         row_m = df_activo.loc[fecha_manana]
                         p_low = float(row_m["Low"])
-                        p_high = float(row_m["High"])
                         p_close = float(row_m["Close"])
                         ema9_m = float(row_m["EMA_9"])
-                        atr_m = float(row_m["ATR_14"])
+                        ema21_m = float(row_m["EMA_21"])
                         
                         cerrar = False
                         resultado_str = ""
                         precio_salida_bruto = 0
                         
+                        # Salida por Stop Loss estructural o cruce bajista de EMAs de cortito plazo
                         if p_low <= pos["StopLoss"]:
                             cerrar = True
                             precio_salida_bruto = pos["StopLoss"]
                             resultado_str = "🔴 STOP LOSS"
-                        elif p_high >= pos["TakeProfit"]:
+                        elif p_close < ema9_m and ema9_m < ema21_m: # Se debilitó la tendencia, salimos a asegurar
                             cerrar = True
-                            precio_salida_bruto = pos["TakeProfit"]
-                            resultado_str = "🎯 TAKE PROFIT"
+                            precio_salida_bruto = p_close
+                            resultado_str = "⚡ SALIDA TENDENCIA"
                         
                         if cerrar:
                             precio_salida_neto = precio_salida_bruto * (1 - COSTO_OPERATIVO)
@@ -181,13 +181,9 @@ if st.button(f"🚀 Ejecutar Simulación de Alto Rendimiento ({opcion_tiempo})")
                                 "Precio Compra ($)": pos["PrecioCompraNeto"],
                                 "Precio Salida ($)": precio_salida_neto,
                                 "SL Inicial": pos["StopLoss"],
-                                "TP Inicial": pos["TakeProfit"]
+                                "TP Inicial": np.nan
                             })
                             tickers_a_cerrar.append(t_activo)
-                        else:
-                            nuevo_stop = round(ema9_m - (1.2 * atr_m), 2)
-                            if p_close > pos["PrecioCompraNeto"] and nuevo_stop > pos["StopLoss"] and nuevo_stop < p_close:
-                                pos["StopLoss"] = nuevo_stop
                 
                 for t in tickers_a_cerrar:
                     posiciones_activas.pop(t)
@@ -201,40 +197,33 @@ if st.button(f"🚀 Ejecutar Simulación de Alto Rendimiento ({opcion_tiempo})")
                         continue
                     
                     if fecha_hoy in df_activo.index:
-                        pos_loc = df_activo.index.get_loc(fecha_hoy)
-                        if pos_loc < 1:
-                            continue
-                        
                         row_hoy = df_activo.loc[fecha_hoy]
-                        row_prev = df_activo.iloc[pos_loc - 1]
                         
                         p_close = float(row_hoy["Close"])
-                        p_open = float(row_hoy["Open"])
                         ema_200 = float(row_hoy["EMA_200"])
                         ema_9 = float(row_hoy["EMA_9"])
+                        ema_21 = float(row_hoy["EMA_21"])
                         rsi = float(row_hoy["RSI_14"])
-                        macd_hist = float(row_hoy["MACD_Hist"])
-                        prev_macd_hist = float(row_prev["MACD_Hist"])
                         vol = float(row_hoy["Volume"])
-                        vol_sma9 = float(row_hoy["Vol_SMA_9"])
+                        vol_sma20 = float(row_hoy["Vol_SMA_20"])
                         atr = float(row_hoy["ATR_14"])
                         
-                        # Filtros exigentes de alta aceleración
-                        cond_tendencia = (p_close > ema_200) and (p_close > ema_9)
-                        cond_momentum = (macd_hist > prev_macd_hist) and (52 < rsi < 68)
-                        cond_gatillo = (p_close > p_open) and (vol > (vol_sma9 * 1.2)) # Volumen 20% superior al promedio
+                        # Condiciones de entrada en tendencia alcista firme
+                        cond_tendencia = (p_close > ema_200)
+                        cond_cruce = (ema_9 > ema_21) # EMA rápida por encima de la lenta
+                        cond_momentum = (45 < rsi < 75)
+                        cond_volumen = (vol > vol_sma20)
                         
-                        if cond_tendencia and cond_momentum and cond_gatillo:
+                        if cond_tendencia and cond_cruce and cond_momentum and cond_volumen:
                             p_neto_compra = p_close * (1 + COSTO_OPERATIVO)
-                            stop_loss = p_neto_compra - (1.5 * atr) # Stop un poco más ceñido para maximizar ratio
-                            target = p_neto_compra + ((p_neto_compra - stop_loss) * 3.0) # Take Profit 1:3 agresivo
+                            stop_loss = p_neto_compra - (2.0 * atr) # Stop amplio para evitar ruidos de mercado
                             
                             riesgo_por_accion = p_neto_compra - stop_loss
                             if stop_loss <= 0 or riesgo_por_accion <= 0:
                                 continue
                             
                             capital_total_actual = efectivo + sum(p["PrecioCompraNeto"] * p["Cantidad"] for p in posiciones_activas.values())
-                            riesgo_max_ars = capital_total_actual * 0.02
+                            riesgo_max_ars = capital_total_actual * 0.025
                             
                             cantidad = int(riesgo_max_ars // riesgo_por_accion)
                             if cantidad <= 0:
@@ -248,7 +237,6 @@ if st.button(f"🚀 Ejecutar Simulación de Alto Rendimiento ({opcion_tiempo})")
                             posiciones_activas[tick] = {
                                 "PrecioCompraNeto": p_neto_compra,
                                 "StopLoss": stop_loss,
-                                "TakeProfit": target,
                                 "Cantidad": cantidad,
                                 "FechaEntrada": fecha_hoy
                             }
@@ -274,12 +262,12 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
         balances.append(acc)
     
     total_t = len(df_trades)
-    ganados = len(df_trades[df_trades['Resultado'] == "🎯 TAKE PROFIT"])
+    ganados = len(df_trades[df_trades['Rendimiento (%)'] > 0])
     winrate = (ganados / total_t) * 100 if total_t > 0 else 0
     ganancia_neta_ars = st.session_state.capital_final_total_global - capital_inicial
     rendimiento_pct = (ganancia_neta_ars / capital_inicial) * 100
     
-    st.success("✅ ¡Simulación de Alto Rendimiento ejecutada con éxito!")
+    st.success("✅ ¡Simulación de Seguimiento Dinámico ejecutada con éxito!")
     
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Operaciones Totales", total_t)
@@ -329,11 +317,9 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
                         low=df_rec['Low'], close=df_rec['Close'], name=tick_aud
                     ))
                     fig.add_trace(go.Scatter(x=df_rec.index, y=df_rec['EMA_9'], line=dict(color='blue', width=1.5), name="EMA 9"))
-                    fig.add_trace(go.Scatter(x=df_rec.index, y=df_rec['EMA_200'], line=dict(color='orange', width=2), name="EMA 200"))
+                    fig.add_trace(go.Scatter(x=df_rec.index, y=df_rec['EMA_21'], line=dict(color='orange', width=1.5), name="EMA 21"))
                     
                     fig.add_trace(go.Scatter(x=[f_c, f_v], y=[t_info["SL Inicial"], t_info["SL Inicial"]], line=dict(color='red', dash='dash'), name="Stop Loss"))
-                    if not pd.isna(t_info["TP Inicial"]):
-                        fig.add_trace(go.Scatter(x=[f_c, f_v], y=[t_info["TP Inicial"], t_info["TP Inicial"]], line=dict(color='green', dash='dash'), name="Take Profit"))
                     
                     fig.add_annotation(x=f_c, y=t_info["Precio Compra ($)"], text="📥 COMPRA", showarrow=True, arrowhead=2, arrowcolor="blue", bgcolor="blue", font=dict(color="white"))
                     fig.add_annotation(x=f_v, y=t_info["Precio Salida ($)"], text=f"📤 {t_info['Resultado']}", showarrow=True, arrowhead=2, arrowcolor="purple", bgcolor="purple", font=dict(color="white"))
@@ -341,4 +327,4 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
                     fig.update_layout(xaxis_rangeslider_visible=False, height=500, template="plotly_white")
                     st.plotly_chart(fig, use_container_width=True)
 elif "df_trades_global" in st.session_state:
-    st.info("No se registraron operaciones con los nuevos filtros de alta aceleración en este período.")
+    st.info("No se registraron operaciones en este período.")
