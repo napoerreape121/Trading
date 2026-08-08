@@ -15,7 +15,7 @@ st.set_page_config(
 )
 
 st.title("🚀 Simulador Cuantitativo: Reversión a la Media Optimizada")
-st.markdown("Estrategia basada en pánico extremo (RSI 2) con salidas por **Risk/Reward Fijo (ATR)**.")
+st.markdown("Estrategia mejorada con **Filtro de Tendencia Individual** y **RSI(5)**.")
 
 # =====================================================================
 # 📋 UNIVERSO DE ACTIVOS (CEDEARs)
@@ -104,7 +104,7 @@ if st.button(f"🚀 Ejecutar Simulación Optimizada ({opcion_tiempo})"):
                     continue
                 
                 df['EMA_200'] = ta.trend.ema_indicator(df['Close'], window=200)
-                df['RSI_2'] = ta.momentum.rsi(df['Close'], window=2)
+                df['RSI_5'] = ta.momentum.rsi(df['Close'], window=5) # Cambiado a RSI 5 más estable
                 df['RSI_14'] = ta.momentum.rsi(df['Close'], window=14)
                 df['ATR_14'] = ta.volatility.average_true_range(df['High'], df['Low'], df['Close'], window=14)
                 df['Vol_SMA_20'] = df['Volume'].rolling(window=20).mean()
@@ -130,16 +130,16 @@ if st.button(f"🚀 Ejecutar Simulación Optimizada ({opcion_tiempo})"):
                 fecha_hoy = fechas_unicas[f]
                 fecha_manana = fechas_unicas[f+1]
                 
-                permite_compras = True
+                permite_compras_mercado = True
                 if not spy_df.empty and fecha_hoy in spy_df.index:
                     if spy_df.loc[fecha_hoy, 'Close'] < spy_df.loc[fecha_hoy, 'EMA_200']:
-                        permite_compras = False
+                        permite_compras_mercado = False
                 
                 capital_liberado_hoy = 0
                 tickers_a_cerrar = []
                 
                 # ==========================================
-                # 1. EVALUAR VENTAS (Priorizando Stop Loss en backtest)
+                # 1. EVALUAR VENTAS
                 # ==========================================
                 for t_activo, pos in list(posiciones_activas.items()):
                     df_activo = st.session_state.diccionario_precios_historicos[t_activo]
@@ -154,7 +154,6 @@ if st.button(f"🚀 Ejecutar Simulación Optimizada ({opcion_tiempo})"):
                         resultado_str = ""
                         precio_salida_bruto = 0
                         
-                        # Al evaluar intradía de manera ciega, siempre testeamos el peor escenario primero (SL)
                         if p_low <= pos["StopLoss"]:
                             cerrar = True
                             precio_salida_bruto = min(pos["StopLoss"], p_open)
@@ -206,22 +205,24 @@ if st.button(f"🚀 Ejecutar Simulación Optimizada ({opcion_tiempo})"):
                         
                         p_close = float(row_hoy["Close"])
                         ema_200 = float(row_hoy["EMA_200"])
-                        rsi_2 = float(row_hoy["RSI_2"])
+                        rsi_5 = float(row_hoy["RSI_5"])
                         rsi_14 = float(row_hoy["RSI_14"])
                         vol = float(row_hoy["Volume"])
                         vol_sma20 = float(row_hoy["Vol_SMA_20"])
                         atr = float(row_hoy["ATR_14"])
                         
-                        cond_tendencia = (p_close > ema_200)
-                        cond_panico = (rsi_2 < 5) and (rsi_14 < 40)
+                        # Filtros estrictos mejorados: Tendencia de Mercado + Tendencia Individual + Pánico sano
+                        cond_tendencia_mercado = permite_compras_mercado
+                        cond_tendencia_individual = (p_close > ema_200)
+                        cond_panico = (rsi_5 < 20) and (rsi_14 < 45)
                         cond_volumen = (vol > 1.2 * vol_sma20) and (vol_sma20 > VOLUMEN_MINIMO) 
                         
-                        if permite_compras and cond_tendencia and cond_panico and cond_volumen:
+                        if cond_tendencia_mercado and cond_tendencia_individual and cond_panico and cond_volumen:
                             p_neto_compra = p_close * (1 + COSTO_OPERATIVO)
                             
-                            # ESTRUCTURA RISK/REWARD (Arriesgamos 1.5 ATR para ir a buscar 2.0 ATR)
+                            # Risk/Reward optimizado (1.5 ATR de riesgo vs 3.0 ATR de ganancia)
                             stop_loss = p_neto_compra - (1.5 * atr) 
-                            take_profit = p_neto_compra + (2.0 * atr)
+                            take_profit = p_neto_compra + (3.0 * atr)
                             
                             riesgo_por_accion = p_neto_compra - stop_loss
                             if stop_loss <= 0 or riesgo_por_accion <= 0:
@@ -339,4 +340,4 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
                     fig.update_layout(xaxis_rangeslider_visible=False, height=500, template="plotly_white")
                     st.plotly_chart(fig, use_container_width=True)
 elif "df_trades_global" in st.session_state:
-    st.info("No se registraron operaciones en este período.")
+    st.info("No se registraron operaciones en este período bajo los filtros estrictos.")
