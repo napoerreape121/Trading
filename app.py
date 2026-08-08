@@ -23,7 +23,7 @@ st.set_page_config(page_title="Asistente Cuantitativo Pro", page_icon="🤖", la
 st.title("🤖 Asistente de Trading de CEDEARs con Gestión Activa de Portafolio")
 st.write(
     "Sistema Cuantitativo Estricto: El bot filtra oportunidades usando confluencias de Tendencia (EMA 200), "
-    "Momentum (MACD + RSI) y Gatillos de Volumen."
+    "Momentum (MACD + RSI), Gatillos de Volumen, y Cross-Validation con el activo en Wall Street."
 )
 
 # Uso de st.secrets (buenas prácticas de seguridad) con fallback a variables de entorno
@@ -296,14 +296,21 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
     # ==========================================
     # PARTE 2: BUSCADOR CUANTITATIVO DE CONFLUENCIAS
     # ==========================================
-    with st.spinner("Ejecutando algoritmo de confluencias estrictas..."):
+    with st.spinner("Ejecutando algoritmo de confluencias y validación cruzada con Wall Street..."):
         try:
+            # 1. Descarga de datos locales (CEDEARs)
             datos_mercado = descargar_mercado(tickers_escaner, period="2y")
+            
+            # 2. Descarga de datos originales (EE.UU.) eliminando el ".BA"
+            tickers_us = [t.replace(".BA", "") for t in tickers_escaner]
+            datos_mercado_us = descargar_mercado(tickers_us, period="2y")
+            
         except Exception as e:
             st.error(f"Error en la descarga de mercado: {e}")
             datos_mercado = None
+            datos_mercado_us = None
 
-    if datos_mercado is not None and not datos_mercado.empty:
+    if datos_mercado is not None and not datos_mercado.empty and datos_mercado_us is not None:
         candidatos_validos = []
         tickers_en_cartera = set(df_portafolio_activo["Ticker"].tolist()) if not df_portafolio_activo.empty else set()
         riesgo_maximo_ars = capital_disponible * 0.02 # Regla inamovible de gestión del 2%
@@ -312,7 +319,29 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
             if ticker in tickers_en_cartera:
                 continue
             
+            ticker_us = ticker.replace(".BA", "")
+            
             try:
+                # -------------------------------------------------------------
+                # FILTRO 0: CROSS-VALIDATION DEL SUBYACENTE (EE.UU.)
+                # -------------------------------------------------------------
+                # Extraemos los datos de la acción original en Wall Street
+                df_us = extraer_ohlc(datos_mercado_us, ticker_us)
+                df_us["EMA_200_US"] = ta.trend.ema_indicator(df_us["Close"], window=200)
+                df_us = df_us.dropna()
+                
+                if len(df_us) < 1:
+                    continue
+                
+                precio_us_vivo = df_us["Close"].iloc[-1]
+                ema200_us_vivo = df_us["EMA_200_US"].iloc[-1]
+                
+                # Si la acción en EE.UU. está en tendencia bajista, se descarta todo
+                if precio_us_vivo <= ema200_us_vivo:
+                    continue
+                # -------------------------------------------------------------
+
+                # Si pasó el filtro de subyacente, procedemos con el CEDEAR
                 df_t = extraer_ohlc(datos_mercado, ticker)
 
                 # Cálculo de Indicadores con librería 'ta' para asegurar integridad matemática
@@ -407,7 +436,7 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
 
             st.dataframe(df_ops, use_container_width=True)
 
-            # Mensaje Telegram con formato estricto solicitado
+            # Mensaje Telegram con formato estricto solicitado y nuevo registro de Validación Cruzada
             msg_tg = (
                 f"🟩 *SEÑAL DE COMPRA CONFIRMADA* 🟩\n\n"
                 f"📌 *Ticker:* `{mejor_opcion['Ticker']}`\n"
@@ -415,11 +444,12 @@ if st.button("🚀 Ejecutar Escáner General y Despachar Gestión"):
                 f"💲 *Precio de Entrada Neto:* `${mejor_opcion['PrecioNetoEntrada']:,.2f}`\n\n"
                 f"⛔ *Stop Loss sugerido:* `${mejor_opcion['StopLoss']:,.2f}`\n"
                 f"🎯 *Target de salida (Ratio 1:2):* `${mejor_opcion['Target']:,.2f}`\n\n"
-                f"✅ _Confluencias: Tendencia (EMA200) + Momentum (EMA9/RSI/MACD) + Gatillo (Volumen/Apertura)._"
+                f"✅ _Confluencias: Tendencia local + Momentum + Volumen._\n"
+                f"🦅 _Cross-Validation US: Aprobado (Subyacente original sobre EMA200)._"
             )
             enviar_alerta_telegram(msg_tg)
         else:
-            st.info("Ningún CEDEAR superó el algoritmo de confluencias estrictas en la sesión actual. Protegiendo capital.")
+            st.info("Ningún CEDEAR superó el algoritmo de confluencias estrictas y validación en la sesión actual. Protegiendo capital.")
 
     if portafolio_modificado:
         st.subheader("📋 Portafolio actualizado tras la gestión")
