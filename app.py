@@ -15,7 +15,7 @@ st.set_page_config(
 )
 
 st.title("🚀 Simulador Cuantitativo: Reversión a la Media Optimizada")
-st.markdown("Estrategia filtrada para maximizar el beneficio neto superando las comisiones operativas. **(Versión Corregida y Mejorada)**")
+st.markdown("Estrategia filtrada para maximizar el beneficio neto superando las comisiones operativas. **(Filtro de Margen Integrado)**")
 
 # =====================================================================
 # 📋 UNIVERSO DE ACTIVOS (CEDEARs)
@@ -131,7 +131,7 @@ if st.button(f"🚀 Ejecutar Simulación Optimizada ({opcion_tiempo})"):
                 fecha_hoy = fechas_unicas[f]
                 fecha_manana = fechas_unicas[f+1]
                 
-                # CORRECCIÓN 1: El filtro SPY ahora solo afecta a las compras, no a las ventas
+                # El filtro SPY ahora solo afecta a las compras
                 permite_compras = True
                 if not spy_df.empty and fecha_hoy in spy_df.index:
                     if spy_df.loc[fecha_hoy, 'Close'] < spy_df.loc[fecha_hoy, 'EMA_200']:
@@ -157,7 +157,7 @@ if st.button(f"🚀 Ejecutar Simulación Optimizada ({opcion_tiempo})"):
                         resultado_str = ""
                         precio_salida_bruto = 0
                         
-                        # CORRECCIÓN 2: Gap en el Stop Loss (Realismo)
+                        # Gap en el Stop Loss (Realismo)
                         if p_low <= pos["StopLoss"]:
                             cerrar = True
                             # Si abrió más abajo que nuestro SL, nos salta a precio de apertura
@@ -199,7 +199,7 @@ if st.button(f"🚀 Ejecutar Simulación Optimizada ({opcion_tiempo})"):
                 tickers_en_cartera = set(posiciones_activas.keys())
                 
                 # ==========================================
-                # 2. EVALUAR COMPRAS (Afectado por filtro SPY)
+                # 2. EVALUAR COMPRAS
                 # ==========================================
                 for tick, df_activo in st.session_state.diccionario_precios_historicos.items():
                     if tick in tickers_en_cartera:
@@ -209,6 +209,7 @@ if st.button(f"🚀 Ejecutar Simulación Optimizada ({opcion_tiempo})"):
                         row_hoy = df_activo.loc[fecha_hoy]
                         
                         p_close = float(row_hoy["Close"])
+                        ema_21_hoy = float(row_hoy["EMA_21"]) 
                         ema_200 = float(row_hoy["EMA_200"])
                         rsi_2 = float(row_hoy["RSI_2"])
                         rsi_14 = float(row_hoy["RSI_14"])
@@ -219,13 +220,20 @@ if st.button(f"🚀 Ejecutar Simulación Optimizada ({opcion_tiempo})"):
                         # Filtros estrictos 
                         cond_tendencia = (p_close > ema_200)
                         cond_panico = (rsi_2 < 5) and (rsi_14 < 40)
-                        # CORRECCIÓN 3: Exigir liquidez real mínima (vol_sma20 > VOLUMEN_MINIMO)
                         cond_volumen = (vol > 1.2 * vol_sma20) and (vol_sma20 > VOLUMEN_MINIMO) 
                         
+                        # 🟢 NUEVO FILTRO: Margen de Seguridad
+                        costo_ida_vuelta = COSTO_OPERATIVO * 2
+                        distancia_a_ema21 = (ema_21_hoy - p_close) / p_close if p_close > 0 else 0
+                        
+                        # Exigimos que el rebote potencial hasta la EMA 21 cubra los costos + un 4% neto mínimo
+                        cond_margen = distancia_a_ema21 > (costo_ida_vuelta + 0.04)
+                        
                         # Si todo se cumple Y el SPY nos permite comprar
-                        if permite_compras and cond_tendencia and cond_panico and cond_volumen:
+                        if permite_compras and cond_tendencia and cond_panico and cond_volumen and cond_margen:
                             p_neto_compra = p_close * (1 + COSTO_OPERATIVO)
-                            stop_loss = p_neto_compra - (2.0 * atr)
+                            # Reducimos el SL a 1.5 ATR para mejorar la relación Riesgo/Beneficio
+                            stop_loss = p_neto_compra - (1.5 * atr) 
                             
                             riesgo_por_accion = p_neto_compra - stop_loss
                             if stop_loss <= 0 or riesgo_por_accion <= 0:
@@ -281,14 +289,12 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
         "Balance": balances
     }).drop_duplicates(subset=["Fecha"]).set_index("Fecha")
     
-    # CORRECCIÓN 4 (Bonus): Calcular Maximum Drawdown (Max DD)
     df_bal['Max_Balance'] = df_bal['Balance'].cummax()
     df_bal['Drawdown'] = (df_bal['Balance'] - df_bal['Max_Balance']) / df_bal['Max_Balance']
     max_dd = df_bal['Drawdown'].min() * 100
     
     st.success("✅ ¡Simulación Optimizada ejecutada con éxito!")
     
-    # 5 columnas para incluir el Max Drawdown
     col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("Operaciones Totales", total_t)
     col2.metric("Efectividad (Win Rate)", f"{winrate:.1f}%")
@@ -344,4 +350,4 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
                     fig.update_layout(xaxis_rangeslider_visible=False, height=500, template="plotly_white")
                     st.plotly_chart(fig, use_container_width=True)
 elif "df_trades_global" in st.session_state:
-    st.info("No se registraron operaciones optimizadas en este período.")
+    st.info("No se registraron operaciones que cumplan con todos los filtros de seguridad y margen en este período.")
