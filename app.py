@@ -11,7 +11,7 @@ st.set_page_config(
     page_icon="🧪", 
     layout="wide"
 )
-st.title("🧪 Simulador Histórico con Capital Limitado y Estrategia de Confluencias")
+st.title("🧪 Simulador Histórico con Capital Limitado y Estrategia de Confluencias Sincronizada")
 st.write("Sistema Cuantitativo Estricto: Tendencia (EMA 200), Momentum (MACD + RSI 40-65), Gatillo de Volumen y Control de Capital Real ($1.000.000 ARS iniciales).")
 
 # Universo de CEDEARs bajo vigilancia
@@ -135,12 +135,10 @@ if st.button(f"🧪 Iniciar Simulación con Capital Limitado ({opcion_tiempo})")
                         resultado_str = ""
                         precio_salida_bruto = 0
                         
-                        # 1. Comprobar Stop Loss
                         if prox_low <= pos["StopLoss"]:
                             cerrar = True
                             precio_salida_bruto = pos["StopLoss"]
                             resultado_str = "🔴 STOP LOSS"
-                        # 2. Comprobar Take Profit (Ratio 1:2)
                         elif prox_high >= pos["TakeProfit"]:
                             cerrar = True
                             precio_salida_bruto = pos["TakeProfit"]
@@ -171,7 +169,6 @@ if st.button(f"🧪 Iniciar Simulación con Capital Limitado ({opcion_tiempo})")
                             })
                             tickers_a_cerrar.append(t_activo)
                         else:
-                            # Actualización de Trailing Stop dinámico basado en EMA9 y ATR
                             nuevo_stop = round(ema9_m - (1.5 * atr_m), 2)
                             if prox_close > pos["PrecioCompraNeto"] and nuevo_stop > pos["StopLoss"] and nuevo_stop < prox_close:
                                 pos["StopLoss"] = nuevo_stop
@@ -181,7 +178,7 @@ if st.button(f"🧪 Iniciar Simulación con Capital Limitado ({opcion_tiempo})")
                 
                 efectivo += capital_liberado_hoy
                 
-                # FASE B: Buscar señales de compra al cierre de HOY
+                # FASE B: Buscar señales de compra al cierre de HOY y ejecutar en la APERTURA de MAÑANA
                 tickers_en_cartera = set(posiciones_activas.keys())
                 
                 for tick, df_activo in st.session_state.diccionario_precios_historicos.items():
@@ -190,10 +187,12 @@ if st.button(f"🧪 Iniciar Simulación con Capital Limitado ({opcion_tiempo})")
                     
                     if (fecha_hoy in df_activo.index) and (fecha_manana in df_activo.index):
                         row_hoy = df_activo.loc[fecha_hoy]
-                        prev_idx = df_activo.index.get_loc(fecha_hoy) - 1
-                        if prev_idx < 0:
+                        
+                        # Validar que existan suficientes filas previas para evitar errores de índice
+                        pos_loc = df_activo.index.get_loc(fecha_hoy)
+                        if pos_loc < 1:
                             continue
-                        row_prev = df_activo.iloc[prev_idx]
+                        row_prev = df_activo.iloc[pos_loc - 1]
                         
                         p_close = float(row_hoy["Close"])
                         p_open = float(row_hoy["Open"])
@@ -223,17 +222,14 @@ if st.button(f"🧪 Iniciar Simulación con Capital Limitado ({opcion_tiempo})")
                             if stop_loss <= 0 or riesgo_por_accion <= 0:
                                 continue
                             
-                            # Cálculo de capital total actual (Efectivo + Valor nominal actual en cartera)
                             capital_total_actual = efectivo + sum(p["PrecioCompraNeto"] * p["Cantidad"] for p in posiciones_activas.values())
-                            riesgo_maximo_ars = capital_total_actual * 0.02  # Arriesgar máximo 2% del capital total por trade
+                            riesgo_maximo_ars = capital_total_actual * 0.02
                             
                             cantidad = int(riesgo_maximo_ars // riesgo_por_accion)
                             if cantidad <= 0:
                                 continue
                             
                             costo_total = p_neto_entrada * cantidad
-                            
-                            # RESTRICCIÓN DE DINERO REAL: Si no hay efectivo suficiente, no se ejecuta la compra
                             if costo_total > efectivo:
                                 continue
                             
@@ -273,7 +269,7 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
     ganancia_pesos = st.session_state.capital_final_total_global - capital_inicial
     rend_cuenta = (ganancia_pesos / capital_inicial) * 100
     
-    st.success("📊 ¡Simulación con Capital Limitado Completada con Éxito!")
+    st.success("📊 ¡Simulación Sincronizada Correctamente!")
     
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Operaciones Totales", total_trades)
