@@ -326,10 +326,11 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
                     if not pd.isna(trade_info["TP Inicial"]):
                         fig.add_trace(go.Scatter(x=[f_compra, f_venta], y=[trade_info["TP Inicial"], trade_info["TP Inicial"]], line=dict(color='green', dash='dash'), name="Take Profit"))
                     
+                    # Forzamos la ubicación exacta usando el precio de apertura de la vela de compra en el eje X real
                     fig.add_annotation(x=f_compra, y=trade_info["Precio Compra ($)"], text="📥 COMPRA", showarrow=True, arrowhead=2, arrowcolor="blue", xanchor="center", yanchor="bottom", bgcolor="blue", font=dict(color="white"))
                     fig.add_annotation(x=f_venta, y=trade_info["Precio Salida ($)"], text=f"📤 {trade_info['Resultado']}", showarrow=True, arrowhead=2, arrowcolor="purple", xanchor="center", yanchor="top", bgcolor="purple", font=dict(color="white"))
                     
-                    fig.update_layout(xaxis_rangeslider_visible=False, height=500, template="plotly_white", xaxis_type="category")
+                    fig.update_layout(xaxis_rangeslider_visible=False, height=500, template="plotly_white")
                     st.plotly_chart(fig, use_container_width=True)
 elif "df_trades_global" in st.session_state:
     st.info("Ninguna operación pudo abrirse bajo las restricciones de capital y confluencias en este período.")
