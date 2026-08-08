@@ -188,7 +188,6 @@ if st.button(f"🧪 Iniciar Simulación con Capital Limitado ({opcion_tiempo})")
                     if (fecha_hoy in df_activo.index) and (fecha_manana in df_activo.index):
                         row_hoy = df_activo.loc[fecha_hoy]
                         
-                        # Validar que existan suficientes filas previas para evitar errores de índice
                         pos_loc = df_activo.index.get_loc(fecha_hoy)
                         if pos_loc < 1:
                             continue
@@ -327,10 +326,10 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
                     if not pd.isna(trade_info["TP Inicial"]):
                         fig.add_trace(go.Scatter(x=[f_compra, f_venta], y=[trade_info["TP Inicial"], trade_info["TP Inicial"]], line=dict(color='green', dash='dash'), name="Take Profit"))
                     
-                    fig.add_annotation(x=f_compra, y=trade_info["Precio Compra ($)"], text="📥 COMPRA", showarrow=True, arrowhead=2, arrowcolor="blue", xref="x", yref="y", bgcolor="blue", font=dict(color="white"))
-                    fig.add_annotation(x=f_venta, y=trade_info["Precio Salida ($)"], text=f"📤 {trade_info['Resultado']}", showarrow=True, arrowhead=2, arrowcolor="purple", xref="x", yref="y", bgcolor="purple", font=dict(color="white"))
+                    fig.add_annotation(x=f_compra, y=trade_info["Precio Compra ($)"], text="📥 COMPRA", showarrow=True, arrowhead=2, arrowcolor="blue", xanchor="center", yanchor="bottom", bgcolor="blue", font=dict(color="white"))
+                    fig.add_annotation(x=f_venta, y=trade_info["Precio Salida ($)"], text=f"📤 {trade_info['Resultado']}", showarrow=True, arrowhead=2, arrowcolor="purple", xanchor="center", yanchor="top", bgcolor="purple", font=dict(color="white"))
                     
-                    fig.update_layout(xaxis_rangeslider_visible=False, height=500, template="plotly_white")
+                    fig.update_layout(xaxis_rangeslider_visible=False, height=500, template="plotly_white", xaxis_type="category")
                     st.plotly_chart(fig, use_container_width=True)
 elif "df_trades_global" in st.session_state:
     st.info("Ninguna operación pudo abrirse bajo las restricciones de capital y confluencias en este período.")
