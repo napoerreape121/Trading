@@ -9,13 +9,13 @@ import ta
 # 🛠️ CONFIGURACIÓN DE LA PÁGINA
 # =====================================================================
 st.set_page_config(
-    page_title="Simulador Cuantitativo: Alto Rendimiento", 
+    page_title="Simulador Cuantitativo: Multitrending Activo", 
     page_icon="🚀", 
     layout="wide"
 )
 
-st.title("🚀 Simulador Cuantitativo: Motor Dinámico de Alta Rotación")
-st.markdown("Estrategia optimizada para generar mayor volumen de operaciones, buscando capturar tendencias dinámicas en CEDEARs.")
+st.title("🚀 Simulador Cuantitativo: Motor Multitrending de Alta Frecuencia")
+st.markdown("Estrategia rediseñada para asegurar rotación fluida, permitiendo múltiples entradas simultáneas y captura constante de alfa.")
 
 # =====================================================================
 # 📋 UNIVERSO DE ACTIVOS (CEDEARs)
@@ -60,16 +60,16 @@ else:
     ruedas_recorte = 750
 
 COSTO_OPERATIVO = (0.0050 + 0.0005) * 1.21
-VOLUMEN_MINIMO = 3000 # Umbral accesible para no filtrar de más
+VOLUMEN_MINIMO = 2000 
 
 if "diccionario_precios_historicos" not in st.session_state:
     st.session_state.diccionario_precios_historicos = {}
 
 # =====================================================================
-# 🚀 MOTOR DE BACKTESTING DINÁMICO
+# 🚀 MOTOR DE BACKTESTING MULTITRENDING
 # =====================================================================
-if st.button(f"🚀 Ejecutar Simulación Dinámica ({opcion_tiempo})"):
-    with st.spinner(f"Descargando datos y procesando rotación de activos..."):
+if st.button(f"🚀 Ejecutar Simulación Multitrending ({opcion_tiempo})"):
+    with st.spinner(f"Descargando datos y procesando matriz multiactivo..."):
         try:
             full_tickers = tickers + ['SPY.BA']
             datos_globales = yf.download(full_tickers, period=periodo_download, interval="1d", progress=False)
@@ -83,7 +83,7 @@ if st.button(f"🚀 Ejecutar Simulación Dinámica ({opcion_tiempo})"):
         try:
             spy_df = pd.DataFrame()
             spy_df['Close'] = datos_globales['Close']['SPY.BA'].dropna()
-            spy_df['EMA_20'] = ta.trend.ema_indicator(spy_df['Close'], window=20)
+            spy_df['SMA_50'] = spy_df['Close'].rolling(window=50).mean()
             spy_df = spy_df.dropna()
             spy_df.index = pd.to_datetime(spy_df.index).normalize()
         except Exception:
@@ -103,8 +103,8 @@ if st.button(f"🚀 Ejecutar Simulación Dinámica ({opcion_tiempo})"):
                 if len(df) < 50:
                     continue
                 
-                df['EMA_20'] = ta.trend.ema_indicator(df['Close'], window=20)
-                df['RSI_5'] = ta.momentum.rsi(df['Close'], window=5) # RSI equilibrado
+                df['SMA_50'] = df['Close'].rolling(window=50).mean()
+                df['RSI_14'] = ta.momentum.rsi(df['Close'], window=14)
                 df['ATR_14'] = ta.volatility.average_true_range(df['High'], df['Low'], df['Close'], window=14)
                 df['Vol_SMA_20'] = df['Volume'].rolling(window=20).mean()
                 
@@ -128,11 +128,6 @@ if st.button(f"🚀 Ejecutar Simulación Dinámica ({opcion_tiempo})"):
             for f in range(total_fechas - 1):
                 fecha_hoy = fechas_unicas[f]
                 fecha_manana = fechas_unicas[f+1]
-                
-                permite_compras_mercado = True
-                if not spy_df.empty and fecha_hoy in spy_df.index:
-                    if spy_df.loc[fecha_hoy, 'Close'] < spy_df.loc[fecha_hoy, 'EMA_20']:
-                        permite_compras_mercado = False
                 
                 capital_liberado_hoy = 0
                 tickers_a_cerrar = []
@@ -193,47 +188,50 @@ if st.button(f"🚀 Ejecutar Simulación Dinámica ({opcion_tiempo})"):
                 tickers_en_cartera = set(posiciones_activas.keys())
                 
                 # ==========================================
-                # 2. EVALUAR COMPRAS (Más dinámicas y frecuentes)
+                # 2. EVALUAR COMPRAS (Swing Trading Estándar Multiactivo)
                 # ==========================================
                 for tick, df_activo in st.session_state.diccionario_precios_historicos.items():
                     if tick in tickers_en_cartera:
                         continue
                     
+                    if len(posiciones_activas) >= 6: # Máximo 6 posiciones simultáneas para diversificar bien
+                        break
+                    
                     if fecha_hoy in df_activo.index:
                         row_hoy = df_activo.loc[fecha_hoy]
                         
                         p_close = float(row_hoy["Close"])
-                        ema_20 = float(row_hoy["EMA_20"])
-                        rsi_5 = float(row_hoy["RSI_5"])
+                        sma_50 = float(row_hoy["SMA_50"])
+                        rsi_14 = float(row_hoy["RSI_14"])
                         vol = float(row_hoy["Volume"])
                         vol_sma20 = float(row_hoy["Vol_SMA_20"])
                         atr = float(row_hoy["ATR_14"])
                         
-                        # Filtros dinámicos orientados a mayor rotación
-                        cond_tendencia = (p_close > ema_20)
-                        cond_momentum = rsi_5 < 30 # Umbral más flexible para captar correcciones comunes
-                        cond_volumen = (vol > 0.9 * vol_sma20) and (vol_sma20 > VOLUMEN_MINIMO) 
+                        # Filtros estables: tendencia alcista con retroceso moderado del RSI
+                        cond_tendencia = (p_close > sma_50)
+                        cond_retroceso = (rsi_14 < 48) and (rsi_14 > 30)
+                        cond_volumen = (vol_sma20 > VOLUMEN_MINIMO)
                         
-                        if permite_compras_mercado and cond_tendencia and cond_momentum and cond_volumen:
+                        if cond_tendencia and cond_retroceso and cond_volumen:
                             p_neto_compra = p_close * (1 + COSTO_OPERATIVO)
                             
-                            # Relación 1.2 ATR de riesgo vs 2.5 ATR de objetivo (alta rotación)
-                            stop_loss = p_neto_compra - (1.2 * atr) 
-                            take_profit = p_neto_compra + (2.5 * atr)
+                            # Relación 1.5 ATR de riesgo vs 3.0 ATR de beneficio
+                            stop_loss = p_neto_compra - (1.5 * atr) 
+                            take_profit = p_neto_compra + (3.0 * atr)
                             
                             riesgo_por_accion = p_neto_compra - stop_loss
                             if stop_loss <= 0 or riesgo_por_accion <= 0:
                                 continue
                             
                             capital_total_actual = efectivo + sum(p["PrecioCompraNeto"] * p["Cantidad"] for p in posiciones_activas.values())
-                            riesgo_max_ars = capital_total_actual * 0.02 # 2% de riesgo por operación
+                            riesgo_max_ars = capital_total_actual * 0.025 # 2.5% de riesgo por operación
                             
                             cantidad = int(riesgo_max_ars // riesgo_por_accion)
                             if cantidad <= 0:
                                 continue
                             
                             costo_total = p_neto_compra * cantidad
-                            if costo_total > efectivo:
+                            if costo_total > efectivo or efectivo < (capital_inicial * 0.1):
                                 continue
                             
                             efectivo -= costo_total
@@ -280,7 +278,7 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
     df_bal['Drawdown'] = (df_bal['Balance'] - df_bal['Max_Balance']) / df_bal['Max_Balance']
     max_dd = df_bal['Drawdown'].min() * 100
     
-    st.success("✅ ¡Simulación Dinámica ejecutada con éxito!")
+    st.success("✅ ¡Simulación Multitrending ejecutada con éxito!")
     
     col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("Operaciones Totales", total_t)
@@ -326,7 +324,7 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
                         x=df_rec.index, open=df_rec['Open'], high=df_rec['High'],
                         low=df_rec['Low'], close=df_rec['Close'], name=tick_aud
                     ))
-                    fig.add_trace(go.Scatter(x=df_rec.index, y=df_rec['EMA_20'], line=dict(color='orange', width=2), name="EMA 20"))
+                    fig.add_trace(go.Scatter(x=df_rec.index, y=df_rec['SMA_50'], line=dict(color='orange', width=2), name="SMA 50"))
                     
                     fig.add_trace(go.Scatter(x=[f_c, f_v], y=[t_info["SL Inicial"], t_info["SL Inicial"]], line=dict(color='red', dash='dash'), name="Stop Loss"))
                     fig.add_trace(go.Scatter(x=[f_c, f_v], y=[t_info["TP Inicial"], t_info["TP Inicial"]], line=dict(color='green', dash='dash'), name="Take Profit"))
@@ -337,4 +335,4 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
                     fig.update_layout(xaxis_rangeslider_visible=False, height=500, template="plotly_white")
                     st.plotly_chart(fig, use_container_width=True)
 elif "df_trades_global" in st.session_state:
-    st.info("No se registraron operaciones bajo los parámetros dinámicos.")
+    st.info("No se registraron operaciones bajo los parámetros actuales.")
