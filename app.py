@@ -9,13 +9,13 @@ import ta
 # 🛠️ CONFIGURACIÓN DE LA PÁGINA
 # =====================================================================
 st.set_page_config(
-    page_title="Simulador Cuantitativo: Alta Ganancia", 
+    page_title="Simulador Cuantitativo: Alto Rendimiento", 
     page_icon="🚀", 
     layout="wide"
 )
 
-st.title("🚀 Simulador Cuantitativo: Motor Agresivo (Alpha Hunting)")
-st.markdown("Estrategia rediseñada para buscar rentabilidades elevadas batiendo tasas pasivas, asumiendo mayor selectividad y rotación.")
+st.title("🚀 Simulador Cuantitativo: Motor Dinámico de Alta Rotación")
+st.markdown("Estrategia optimizada para generar mayor volumen de operaciones, buscando capturar tendencias dinámicas en CEDEARs.")
 
 # =====================================================================
 # 📋 UNIVERSO DE ACTIVOS (CEDEARs)
@@ -60,16 +60,16 @@ else:
     ruedas_recorte = 750
 
 COSTO_OPERATIVO = (0.0050 + 0.0005) * 1.21
-VOLUMEN_MINIMO = 15000 # Mayor exigencia de liquidez para operar rápido
+VOLUMEN_MINIMO = 3000 # Umbral accesible para no filtrar de más
 
 if "diccionario_precios_historicos" not in st.session_state:
     st.session_state.diccionario_precios_historicos = {}
 
 # =====================================================================
-# 🚀 MOTOR DE BACKTESTING AGRESIVO
+# 🚀 MOTOR DE BACKTESTING DINÁMICO
 # =====================================================================
-if st.button(f"🚀 Ejecutar Simulación Agresiva ({opcion_tiempo})"):
-    with st.spinner(f"Calculando oportunidades de alta rentabilidad..."):
+if st.button(f"🚀 Ejecutar Simulación Dinámica ({opcion_tiempo})"):
+    with st.spinner(f"Descargando datos y procesando rotación de activos..."):
         try:
             full_tickers = tickers + ['SPY.BA']
             datos_globales = yf.download(full_tickers, period=periodo_download, interval="1d", progress=False)
@@ -83,7 +83,7 @@ if st.button(f"🚀 Ejecutar Simulación Agresiva ({opcion_tiempo})"):
         try:
             spy_df = pd.DataFrame()
             spy_df['Close'] = datos_globales['Close']['SPY.BA'].dropna()
-            spy_df['EMA_50'] = ta.trend.ema_indicator(spy_df['Close'], window=50) # Media más rápida para el mercado
+            spy_df['EMA_20'] = ta.trend.ema_indicator(spy_df['Close'], window=20)
             spy_df = spy_df.dropna()
             spy_df.index = pd.to_datetime(spy_df.index).normalize()
         except Exception:
@@ -100,11 +100,11 @@ if st.button(f"🚀 Ejecutar Simulación Agresiva ({opcion_tiempo})"):
                 df['High'] = datos_globales['High'][ticker].dropna()
                 df['Volume'] = datos_globales['Volume'][ticker].dropna()
                 
-                if len(df) < 100:
+                if len(df) < 50:
                     continue
                 
-                df['EMA_50'] = ta.trend.ema_indicator(df['Close'], window=50)
-                df['RSI_3'] = ta.momentum.rsi(df['Close'], window=3) # RSI ultra reactivo
+                df['EMA_20'] = ta.trend.ema_indicator(df['Close'], window=20)
+                df['RSI_5'] = ta.momentum.rsi(df['Close'], window=5) # RSI equilibrado
                 df['ATR_14'] = ta.volatility.average_true_range(df['High'], df['Low'], df['Close'], window=14)
                 df['Vol_SMA_20'] = df['Volume'].rolling(window=20).mean()
                 
@@ -131,7 +131,7 @@ if st.button(f"🚀 Ejecutar Simulación Agresiva ({opcion_tiempo})"):
                 
                 permite_compras_mercado = True
                 if not spy_df.empty and fecha_hoy in spy_df.index:
-                    if spy_df.loc[fecha_hoy, 'Close'] < spy_df.loc[fecha_hoy, 'EMA_50']:
+                    if spy_df.loc[fecha_hoy, 'Close'] < spy_df.loc[fecha_hoy, 'EMA_20']:
                         permite_compras_mercado = False
                 
                 capital_liberado_hoy = 0
@@ -160,7 +160,7 @@ if st.button(f"🚀 Ejecutar Simulación Agresiva ({opcion_tiempo})"):
                         elif p_high >= pos["TakeProfit"]: 
                             cerrar = True
                             precio_salida_bruto = max(pos["TakeProfit"], p_open)
-                            resultado_str = "🚀 TAKE PROFIT ALTO"
+                            resultado_str = "🎯 TAKE PROFIT"
                         
                         if cerrar:
                             precio_salida_neto = precio_salida_bruto * (1 - COSTO_OPERATIVO)
@@ -193,7 +193,7 @@ if st.button(f"🚀 Ejecutar Simulación Agresiva ({opcion_tiempo})"):
                 tickers_en_cartera = set(posiciones_activas.keys())
                 
                 # ==========================================
-                # 2. EVALUAR COMPRAS (Lógica Agresiva)
+                # 2. EVALUAR COMPRAS (Más dinámicas y frecuentes)
                 # ==========================================
                 for tick, df_activo in st.session_state.diccionario_precios_historicos.items():
                     if tick in tickers_en_cartera:
@@ -203,30 +203,30 @@ if st.button(f"🚀 Ejecutar Simulación Agresiva ({opcion_tiempo})"):
                         row_hoy = df_activo.loc[fecha_hoy]
                         
                         p_close = float(row_hoy["Close"])
-                        ema_50 = float(row_hoy["EMA_50"])
-                        rsi_3 = float(row_hoy["RSI_3"])
+                        ema_20 = float(row_hoy["EMA_20"])
+                        rsi_5 = float(row_hoy["RSI_5"])
                         vol = float(row_hoy["Volume"])
                         vol_sma20 = float(row_hoy["Vol_SMA_20"])
                         atr = float(row_hoy["ATR_14"])
                         
-                        # Filtros dinámicos orientados a capturar momentum alcista rápido
-                        cond_tendencia = (p_close > ema_50)
-                        cond_momentum = rsi_3 < 10 # Pánico fuerte de corto plazo
-                        cond_volumen = (vol > 1.5 * vol_sma20) and (vol_sma20 > VOLUMEN_MINIMO) 
+                        # Filtros dinámicos orientados a mayor rotación
+                        cond_tendencia = (p_close > ema_20)
+                        cond_momentum = rsi_5 < 30 # Umbral más flexible para captar correcciones comunes
+                        cond_volumen = (vol > 0.9 * vol_sma20) and (vol_sma20 > VOLUMEN_MINIMO) 
                         
                         if permite_compras_mercado and cond_tendencia and cond_momentum and cond_volumen:
                             p_neto_compra = p_close * (1 + COSTO_OPERATIVO)
                             
-                            # Relación asimétrica agresiva: 1.0 ATR de riesgo vs 4.0 ATR de objetivo
-                            stop_loss = p_neto_compra - (1.0 * atr) 
-                            take_profit = p_neto_compra + (4.0 * atr)
+                            # Relación 1.2 ATR de riesgo vs 2.5 ATR de objetivo (alta rotación)
+                            stop_loss = p_neto_compra - (1.2 * atr) 
+                            take_profit = p_neto_compra + (2.5 * atr)
                             
                             riesgo_por_accion = p_neto_compra - stop_loss
                             if stop_loss <= 0 or riesgo_por_accion <= 0:
                                 continue
                             
                             capital_total_actual = efectivo + sum(p["PrecioCompraNeto"] * p["Cantidad"] for p in posiciones_activas.values())
-                            riesgo_max_ars = capital_total_actual * 0.04 # Arriesgamos un 4% por trade para mayor aceleración
+                            riesgo_max_ars = capital_total_actual * 0.02 # 2% de riesgo por operación
                             
                             cantidad = int(riesgo_max_ars // riesgo_por_accion)
                             if cantidad <= 0:
@@ -280,7 +280,7 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
     df_bal['Drawdown'] = (df_bal['Balance'] - df_bal['Max_Balance']) / df_bal['Max_Balance']
     max_dd = df_bal['Drawdown'].min() * 100
     
-    st.success("✅ ¡Simulación Agresiva ejecutada con éxito!")
+    st.success("✅ ¡Simulación Dinámica ejecutada con éxito!")
     
     col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("Operaciones Totales", total_t)
@@ -326,7 +326,7 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
                         x=df_rec.index, open=df_rec['Open'], high=df_rec['High'],
                         low=df_rec['Low'], close=df_rec['Close'], name=tick_aud
                     ))
-                    fig.add_trace(go.Scatter(x=df_rec.index, y=df_rec['EMA_50'], line=dict(color='orange', width=2), name="EMA 50"))
+                    fig.add_trace(go.Scatter(x=df_rec.index, y=df_rec['EMA_20'], line=dict(color='orange', width=2), name="EMA 20"))
                     
                     fig.add_trace(go.Scatter(x=[f_c, f_v], y=[t_info["SL Inicial"], t_info["SL Inicial"]], line=dict(color='red', dash='dash'), name="Stop Loss"))
                     fig.add_trace(go.Scatter(x=[f_c, f_v], y=[t_info["TP Inicial"], t_info["TP Inicial"]], line=dict(color='green', dash='dash'), name="Take Profit"))
@@ -337,4 +337,4 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
                     fig.update_layout(xaxis_rangeslider_visible=False, height=500, template="plotly_white")
                     st.plotly_chart(fig, use_container_width=True)
 elif "df_trades_global" in st.session_state:
-    st.info("No se registraron operaciones bajo los parámetros agresivos en este período.")
+    st.info("No se registraron operaciones bajo los parámetros dinámicos.")
