@@ -9,13 +9,13 @@ import ta
 # 🛠️ CONFIGURACIÓN DE LA PÁGINA
 # =====================================================================
 st.set_page_config(
-    page_title="Simulador Cuantitativo Optimizado", 
+    page_title="Simulador Cuantitativo de Alto Rendimiento", 
     page_icon="🚀", 
     layout="wide"
 )
 
-st.title("🚀 Simulador Cuantitativo: Filtro Institucional y Market Regime")
-st.markdown("Estrategia optimizada con filtro de régimen de mercado (SPY.BA > EMA 200), RSI de momentum fuerte y gestión de riesgo real.")
+st.title("🚀 Simulador Cuantitativo: Versión de Alto Rendimiento (Objetivo 1:3)")
+st.markdown("Estrategia optimizada con ratio de beneficio expandido y filtros de aceleración de volumen.")
 
 # =====================================================================
 # 📋 UNIVERSO DE ACTIVOS (CEDEARs)
@@ -59,17 +59,16 @@ else:
     periodo_download = "42mo"
     ruedas_recorte = 750
 
-# Costos operativos
 COSTO_OPERATIVO = (0.0050 + 0.0005) * 1.21
 
 if "diccionario_precios_historicos" not in st.session_state:
     st.session_state.diccionario_precios_historicos = {}
 
 # =====================================================================
-# 🚀 MOTOR DE BACKTESTING CON FILTRO INSTITUCIONAL (MARKET REGIME)
+# 🚀 MOTOR DE BACKTESTING DE ALTO RENDIMIENTO
 # =====================================================================
-if st.button(f"🚀 Ejecutar Simulación Optimizada ({opcion_tiempo})"):
-    with st.spinner(f"Descargando datos y aplicando filtros de régimen de mercado..."):
+if st.button(f"🚀 Ejecutar Simulación de Alto Rendimiento ({opcion_tiempo})"):
+    with st.spinner(f"Descargando datos y procesando con objetivo 1:3..."):
         try:
             full_tickers = tickers + ['SPY.BA']
             datos_globales = yf.download(full_tickers, period=periodo_download, interval="1d", progress=False)
@@ -80,7 +79,6 @@ if st.button(f"🚀 Ejecutar Simulación Optimizada ({opcion_tiempo})"):
     if datos_globales is not None and not datos_globales.empty:
         st.session_state.diccionario_precios_historicos = {}
         
-        # Procesar SPY.BA para el régimen de mercado
         try:
             spy_df = pd.DataFrame()
             spy_df['Close'] = datos_globales['Close']['SPY.BA'].dropna()
@@ -132,15 +130,13 @@ if st.button(f"🚀 Ejecutar Simulación Optimizada ({opcion_tiempo})"):
                 fecha_hoy = fechas_unicas[f]
                 fecha_manana = fechas_unicas[f+1]
                 
-                # FILTRO DE MERCADO GENERAL (Market Regime): Si el SPY está bajista, no operamos
                 if not spy_df.empty and fecha_hoy in spy_df.index:
                     if spy_df.loc[fecha_hoy, 'Close'] < spy_df.loc[fecha_hoy, 'EMA_200']:
-                        continue # Saltea todo este día por seguridad macro
+                        continue
                 
                 capital_liberado_hoy = 0
                 tickers_a_cerrar = []
                 
-                # FASE 1: Gestionar SL y TP
                 for t_activo, pos in list(posiciones_activas.items()):
                     df_activo = st.session_state.diccionario_precios_historicos[t_activo]
                     
@@ -189,7 +185,7 @@ if st.button(f"🚀 Ejecutar Simulación Optimizada ({opcion_tiempo})"):
                             })
                             tickers_a_cerrar.append(t_activo)
                         else:
-                            nuevo_stop = round(ema9_m - (1.5 * atr_m), 2)
+                            nuevo_stop = round(ema9_m - (1.2 * atr_m), 2)
                             if p_close > pos["PrecioCompraNeto"] and nuevo_stop > pos["StopLoss"] and nuevo_stop < p_close:
                                 pos["StopLoss"] = nuevo_stop
                 
@@ -198,7 +194,6 @@ if st.button(f"🚀 Ejecutar Simulación Optimizada ({opcion_tiempo})"):
                 
                 efectivo += capital_liberado_hoy
                 
-                # FASE 2: Buscar señales con filtros optimizados
                 tickers_en_cartera = set(posiciones_activas.keys())
                 
                 for tick, df_activo in st.session_state.diccionario_precios_historicos.items():
@@ -224,15 +219,15 @@ if st.button(f"🚀 Ejecutar Simulación Optimizada ({opcion_tiempo})"):
                         vol_sma9 = float(row_hoy["Vol_SMA_9"])
                         atr = float(row_hoy["ATR_14"])
                         
-                        # Filtros optimizados e institucionales
+                        # Filtros exigentes de alta aceleración
                         cond_tendencia = (p_close > ema_200) and (p_close > ema_9)
-                        cond_momentum = (macd_hist > prev_macd_hist) and (50 < rsi < 70) # RSI más exigente
-                        cond_gatillo = (p_close > p_open) and (vol > vol_sma9)
+                        cond_momentum = (macd_hist > prev_macd_hist) and (52 < rsi < 68)
+                        cond_gatillo = (p_close > p_open) and (vol > (vol_sma9 * 1.2)) # Volumen 20% superior al promedio
                         
                         if cond_tendencia and cond_momentum and cond_gatillo:
                             p_neto_compra = p_close * (1 + COSTO_OPERATIVO)
-                            stop_loss = p_neto_compra - (2 * atr)
-                            target = p_neto_compra + ((p_neto_compra - stop_loss) * 2.5) # Ratio 1:2.5 optimizado
+                            stop_loss = p_neto_compra - (1.5 * atr) # Stop un poco más ceñido para maximizar ratio
+                            target = p_neto_compra + ((p_neto_compra - stop_loss) * 3.0) # Take Profit 1:3 agresivo
                             
                             riesgo_por_accion = p_neto_compra - stop_loss
                             if stop_loss <= 0 or riesgo_por_accion <= 0:
@@ -284,7 +279,7 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
     ganancia_neta_ars = st.session_state.capital_final_total_global - capital_inicial
     rendimiento_pct = (ganancia_neta_ars / capital_inicial) * 100
     
-    st.success("✅ ¡Simulación con Filtro Institucional ejecutada con éxito!")
+    st.success("✅ ¡Simulación de Alto Rendimiento ejecutada con éxito!")
     
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Operaciones Totales", total_t)
@@ -346,4 +341,4 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
                     fig.update_layout(xaxis_rangeslider_visible=False, height=500, template="plotly_white")
                     st.plotly_chart(fig, use_container_width=True)
 elif "df_trades_global" in st.session_state:
-    st.info("No se registraron operaciones bajo los nuevos filtros institucionales en este período.")
+    st.info("No se registraron operaciones con los nuevos filtros de alta aceleración en este período.")
