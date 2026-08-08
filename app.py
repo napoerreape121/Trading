@@ -15,7 +15,7 @@ st.set_page_config(
 )
 
 st.title("🚀 Simulador Cuantitativo: Reversión a la Media Optimizada")
-st.markdown("Estrategia filtrada para maximizar el beneficio neto superando las comisiones operativas. **(Filtro de Margen Integrado)**")
+st.markdown("Estrategia basada en pánico extremo (RSI 2) con salidas por **Risk/Reward Fijo (ATR)**.")
 
 # =====================================================================
 # 📋 UNIVERSO DE ACTIVOS (CEDEARs)
@@ -60,7 +60,7 @@ else:
     ruedas_recorte = 750
 
 COSTO_OPERATIVO = (0.0050 + 0.0005) * 1.21
-VOLUMEN_MINIMO = 5000 # Para evitar operar CEDEARs ilíquidos
+VOLUMEN_MINIMO = 5000 
 
 if "diccionario_precios_historicos" not in st.session_state:
     st.session_state.diccionario_precios_historicos = {}
@@ -69,7 +69,7 @@ if "diccionario_precios_historicos" not in st.session_state:
 # 🚀 MOTOR DE BACKTESTING OPTIMIZADO
 # =====================================================================
 if st.button(f"🚀 Ejecutar Simulación Optimizada ({opcion_tiempo})"):
-    with st.spinner(f"Descargando datos y filtrando operaciones de alta calidad..."):
+    with st.spinner(f"Descargando datos y procesando algoritmia matemática..."):
         try:
             full_tickers = tickers + ['SPY.BA']
             datos_globales = yf.download(full_tickers, period=periodo_download, interval="1d", progress=False)
@@ -103,7 +103,6 @@ if st.button(f"🚀 Ejecutar Simulación Optimizada ({opcion_tiempo})"):
                 if len(df) < 200:
                     continue
                 
-                df['EMA_21'] = ta.trend.ema_indicator(df['Close'], window=21)
                 df['EMA_200'] = ta.trend.ema_indicator(df['Close'], window=200)
                 df['RSI_2'] = ta.momentum.rsi(df['Close'], window=2)
                 df['RSI_14'] = ta.momentum.rsi(df['Close'], window=14)
@@ -131,7 +130,6 @@ if st.button(f"🚀 Ejecutar Simulación Optimizada ({opcion_tiempo})"):
                 fecha_hoy = fechas_unicas[f]
                 fecha_manana = fechas_unicas[f+1]
                 
-                # El filtro SPY ahora solo afecta a las compras
                 permite_compras = True
                 if not spy_df.empty and fecha_hoy in spy_df.index:
                     if spy_df.loc[fecha_hoy, 'Close'] < spy_df.loc[fecha_hoy, 'EMA_200']:
@@ -141,7 +139,7 @@ if st.button(f"🚀 Ejecutar Simulación Optimizada ({opcion_tiempo})"):
                 tickers_a_cerrar = []
                 
                 # ==========================================
-                # 1. EVALUAR VENTAS (Se hace SIEMPRE)
+                # 1. EVALUAR VENTAS (Priorizando Stop Loss en backtest)
                 # ==========================================
                 for t_activo, pos in list(posiciones_activas.items()):
                     df_activo = st.session_state.diccionario_precios_historicos[t_activo]
@@ -150,23 +148,21 @@ if st.button(f"🚀 Ejecutar Simulación Optimizada ({opcion_tiempo})"):
                         row_m = df_activo.loc[fecha_manana]
                         p_open = float(row_m["Open"])
                         p_low = float(row_m["Low"])
-                        p_close = float(row_m["Close"])
-                        ema21_m = float(row_m["EMA_21"])
+                        p_high = float(row_m["High"])
                         
                         cerrar = False
                         resultado_str = ""
                         precio_salida_bruto = 0
                         
-                        # Gap en el Stop Loss (Realismo)
+                        # Al evaluar intradía de manera ciega, siempre testeamos el peor escenario primero (SL)
                         if p_low <= pos["StopLoss"]:
                             cerrar = True
-                            # Si abrió más abajo que nuestro SL, nos salta a precio de apertura
                             precio_salida_bruto = min(pos["StopLoss"], p_open)
                             resultado_str = "🔴 STOP LOSS"
-                        elif p_close >= ema21_m: 
+                        elif p_high >= pos["TakeProfit"]: 
                             cerrar = True
-                            precio_salida_bruto = p_close
-                            resultado_str = "🎯 TAKE PROFIT REBOTE"
+                            precio_salida_bruto = max(pos["TakeProfit"], p_open)
+                            resultado_str = "🎯 TAKE PROFIT"
                         
                         if cerrar:
                             precio_salida_neto = precio_salida_bruto * (1 - COSTO_OPERATIVO)
@@ -188,7 +184,7 @@ if st.button(f"🚀 Ejecutar Simulación Optimizada ({opcion_tiempo})"):
                                 "Precio Compra ($)": pos["PrecioCompraNeto"],
                                 "Precio Salida ($)": precio_salida_neto,
                                 "SL Inicial": pos["StopLoss"],
-                                "TP Inicial": np.nan
+                                "TP Inicial": pos["TakeProfit"]
                             })
                             tickers_a_cerrar.append(t_activo)
                 
@@ -209,7 +205,6 @@ if st.button(f"🚀 Ejecutar Simulación Optimizada ({opcion_tiempo})"):
                         row_hoy = df_activo.loc[fecha_hoy]
                         
                         p_close = float(row_hoy["Close"])
-                        ema_21_hoy = float(row_hoy["EMA_21"]) 
                         ema_200 = float(row_hoy["EMA_200"])
                         rsi_2 = float(row_hoy["RSI_2"])
                         rsi_14 = float(row_hoy["RSI_14"])
@@ -217,23 +212,16 @@ if st.button(f"🚀 Ejecutar Simulación Optimizada ({opcion_tiempo})"):
                         vol_sma20 = float(row_hoy["Vol_SMA_20"])
                         atr = float(row_hoy["ATR_14"])
                         
-                        # Filtros estrictos 
                         cond_tendencia = (p_close > ema_200)
                         cond_panico = (rsi_2 < 5) and (rsi_14 < 40)
                         cond_volumen = (vol > 1.2 * vol_sma20) and (vol_sma20 > VOLUMEN_MINIMO) 
                         
-                        # 🟢 NUEVO FILTRO: Margen de Seguridad
-                        costo_ida_vuelta = COSTO_OPERATIVO * 2
-                        distancia_a_ema21 = (ema_21_hoy - p_close) / p_close if p_close > 0 else 0
-                        
-                        # Exigimos que el rebote potencial hasta la EMA 21 cubra los costos + un 4% neto mínimo
-                        cond_margen = distancia_a_ema21 > (costo_ida_vuelta + 0.04)
-                        
-                        # Si todo se cumple Y el SPY nos permite comprar
-                        if permite_compras and cond_tendencia and cond_panico and cond_volumen and cond_margen:
+                        if permite_compras and cond_tendencia and cond_panico and cond_volumen:
                             p_neto_compra = p_close * (1 + COSTO_OPERATIVO)
-                            # Reducimos el SL a 1.5 ATR para mejorar la relación Riesgo/Beneficio
+                            
+                            # ESTRUCTURA RISK/REWARD (Arriesgamos 1.5 ATR para ir a buscar 2.0 ATR)
                             stop_loss = p_neto_compra - (1.5 * atr) 
+                            take_profit = p_neto_compra + (2.0 * atr)
                             
                             riesgo_por_accion = p_neto_compra - stop_loss
                             if stop_loss <= 0 or riesgo_por_accion <= 0:
@@ -254,6 +242,7 @@ if st.button(f"🚀 Ejecutar Simulación Optimizada ({opcion_tiempo})"):
                             posiciones_activas[tick] = {
                                 "PrecioCompraNeto": p_neto_compra,
                                 "StopLoss": stop_loss,
+                                "TakeProfit": take_profit,
                                 "Cantidad": cantidad,
                                 "FechaEntrada": fecha_hoy
                             }
@@ -279,7 +268,7 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
         balances.append(acc)
     
     total_t = len(df_trades)
-    ganados = len(df_trades[df_trades['Rendimiento (%)'] > 0])
+    ganados = len(df_trades[df_trades['Resultado'].str.contains("TAKE PROFIT")])
     winrate = (ganados / total_t) * 100 if total_t > 0 else 0
     ganancia_neta_ars = st.session_state.capital_final_total_global - capital_inicial
     rendimiento_pct = (ganancia_neta_ars / capital_inicial) * 100
@@ -339,10 +328,10 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
                         x=df_rec.index, open=df_rec['Open'], high=df_rec['High'],
                         low=df_rec['Low'], close=df_rec['Close'], name=tick_aud
                     ))
-                    fig.add_trace(go.Scatter(x=df_rec.index, y=df_rec['EMA_21'], line=dict(color='blue', width=1.5), name="EMA 21"))
                     fig.add_trace(go.Scatter(x=df_rec.index, y=df_rec['EMA_200'], line=dict(color='orange', width=2), name="EMA 200"))
                     
                     fig.add_trace(go.Scatter(x=[f_c, f_v], y=[t_info["SL Inicial"], t_info["SL Inicial"]], line=dict(color='red', dash='dash'), name="Stop Loss"))
+                    fig.add_trace(go.Scatter(x=[f_c, f_v], y=[t_info["TP Inicial"], t_info["TP Inicial"]], line=dict(color='green', dash='dash'), name="Take Profit"))
                     
                     fig.add_annotation(x=f_c, y=t_info["Precio Compra ($)"], text="📥 COMPRA", showarrow=True, arrowhead=2, arrowcolor="blue", bgcolor="blue", font=dict(color="white"))
                     fig.add_annotation(x=f_v, y=t_info["Precio Salida ($)"], text=f"📤 {t_info['Resultado']}", showarrow=True, arrowhead=2, arrowcolor="purple", bgcolor="purple", font=dict(color="white"))
@@ -350,4 +339,4 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
                     fig.update_layout(xaxis_rangeslider_visible=False, height=500, template="plotly_white")
                     st.plotly_chart(fig, use_container_width=True)
 elif "df_trades_global" in st.session_state:
-    st.info("No se registraron operaciones que cumplan con todos los filtros de seguridad y margen en este período.")
+    st.info("No se registraron operaciones en este período.")
