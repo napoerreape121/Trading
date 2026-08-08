@@ -9,13 +9,13 @@ import ta
 # 🛠️ CONFIGURACIÓN DE LA PÁGINA
 # =====================================================================
 st.set_page_config(
-    page_title="Simulador Cuantitativo: Breakout Institucional", 
+    page_title="Simulador Cuantitativo: Reversión a la Media", 
     page_icon="🚀", 
     layout="wide"
 )
 
-st.title("🚀 Simulador Cuantitativo: Breakout de Máximos con Filtro ADX")
-st.markdown("Estrategia de ruptura de máximos de 20 ruedas filtrada por fuerza de tendencia institucional (ADX > 25).")
+st.title("🚀 Simulador Cuantitativo: Reversión a la Media (Compra en Pánico)")
+st.markdown("Estrategia cuantitativa de alta efectividad basada en la compra de sobreventas en tendencias alcistas estructurales.")
 
 # =====================================================================
 # 📋 UNIVERSO DE ACTIVOS (CEDEARs)
@@ -65,10 +65,10 @@ if "diccionario_precios_historicos" not in st.session_state:
     st.session_state.diccionario_precios_historicos = {}
 
 # =====================================================================
-# 🚀 MOTOR DE BACKTESTING DE BREAKOUT INSTITUCIONAL
+# 🚀 MOTOR DE BACKTESTING DE REVERSIÓN A LA MEDIA
 # =====================================================================
-if st.button(f"🚀 Ejecutar Simulación de Breakout ({opcion_tiempo})"):
-    with st.spinner(f"Descargando datos y procesando sistema de ruptura con ADX..."):
+if st.button(f"🚀 Ejecutar Simulación de Reversión ({opcion_tiempo})"):
+    with st.spinner(f"Descargando datos y procesando sistema de sobreventa..."):
         try:
             full_tickers = tickers + ['SPY.BA']
             datos_globales = yf.download(full_tickers, period=periodo_download, interval="1d", progress=False)
@@ -102,11 +102,11 @@ if st.button(f"🚀 Ejecutar Simulación de Breakout ({opcion_tiempo})"):
                 if len(df) < 200:
                     continue
                 
+                df['EMA_9'] = ta.trend.ema_indicator(df['Close'], window=9)
                 df['EMA_200'] = ta.trend.ema_indicator(df['Close'], window=200)
-                df['Max_20'] = df['High'].shift(1).rolling(window=20).max() # Canal Donchian de máximos
-                df['ADX'] = ta.trend.adx(df['High'], df['Low'], df['Close'], window=14)
+                df['RSI_2'] = ta.momentum.rsi(df['Close'], window=2) # RSI ultra corto para detectar pánico
+                df['RSI_14'] = ta.momentum.rsi(df['Close'], window=14)
                 df['ATR_14'] = ta.volatility.average_true_range(df['High'], df['Low'], df['Close'], window=14)
-                df['Vol_SMA_20'] = df['Volume'].rolling(window=20).mean()
                 
                 df = df.dropna()
                 df.index = pd.to_datetime(df.index).normalize()
@@ -142,8 +142,8 @@ if st.button(f"🚀 Ejecutar Simulación de Breakout ({opcion_tiempo})"):
                     if fecha_manana in df_activo.index:
                         row_m = df_activo.loc[fecha_manana]
                         p_low = float(row_m["Low"])
-                        p_high = float(row_m["High"])
                         p_close = float(row_m["Close"])
+                        ema9_m = float(row_m["EMA_9"])
                         
                         cerrar = False
                         resultado_str = ""
@@ -153,10 +153,10 @@ if st.button(f"🚀 Ejecutar Simulación de Breakout ({opcion_tiempo})"):
                             cerrar = True
                             precio_salida_bruto = pos["StopLoss"]
                             resultado_str = "🔴 STOP LOSS"
-                        elif p_high >= pos["TakeProfit"]:
+                        elif p_close >= ema9_m: # Sale apenas cruza al alza la media rápida en el rebote
                             cerrar = True
-                            precio_salida_bruto = pos["TakeProfit"]
-                            resultado_str = "🎯 TAKE PROFIT"
+                            precio_salida_bruto = p_close
+                            resultado_str = "🎯 TAKE PROFIT REBOTE"
                         
                         if cerrar:
                             precio_salida_neto = precio_salida_bruto * (1 - COSTO_OPERATIVO)
@@ -178,7 +178,7 @@ if st.button(f"🚀 Ejecutar Simulación de Breakout ({opcion_tiempo})"):
                                 "Precio Compra ($)": pos["PrecioCompraNeto"],
                                 "Precio Salida ($)": precio_salida_neto,
                                 "SL Inicial": pos["StopLoss"],
-                                "TP Inicial": pos["TakeProfit"]
+                                "TP Inicial": np.nan
                             })
                             tickers_a_cerrar.append(t_activo)
                 
@@ -198,22 +198,17 @@ if st.button(f"🚀 Ejecutar Simulación de Breakout ({opcion_tiempo})"):
                         
                         p_close = float(row_hoy["Close"])
                         ema_200 = float(row_hoy["EMA_200"])
-                        max_20 = float(row_hoy["Max_20"])
-                        adx = float(row_hoy["ADX"])
-                        vol = float(row_hoy["Volume"])
-                        vol_sma20 = float(row_hoy["Vol_SMA_20"])
+                        rsi_2 = float(row_hoy["RSI_2"])
+                        rsi_14 = float(row_hoy["RSI_14"])
                         atr = float(row_hoy["ATR_14"])
                         
-                        # Gatillo de Breakout Institucional
+                        # Gatillo de Reversión a la Media (Comprar el dip en tendencia alcista)
                         cond_tendencia = (p_close > ema_200)
-                        cond_breakout = (p_close >= max_20) # Rompe el máximo de las últimas 20 ruedas
-                        cond_fuerza = (adx > 22) # Tendencia firme validada por ADX
-                        cond_volumen = (vol > vol_sma20)
+                        cond_panico = (rsi_2 < 10) and (rsi_14 < 45) # Sobreventa extrema de corto plazo
                         
-                        if cond_tendencia and cond_breakout and cond_fuerza and cond_volumen:
+                        if cond_tendencia and cond_panico:
                             p_neto_compra = p_close * (1 + COSTO_OPERATIVO)
-                            stop_loss = p_neto_compra - (2.0 * atr)
-                            target = p_neto_compra + ((p_neto_compra - stop_loss) * 3.5) # Ratio 1:3.5 para buscar grandes saltos
+                            stop_loss = p_neto_compra - (2.5 * atr) # Stop amplio para aguantar la volatilidad
                             
                             riesgo_por_accion = p_neto_compra - stop_loss
                             if stop_loss <= 0 or riesgo_por_accion <= 0:
@@ -234,7 +229,6 @@ if st.button(f"🚀 Ejecutar Simulación de Breakout ({opcion_tiempo})"):
                             posiciones_activas[tick] = {
                                 "PrecioCompraNeto": p_neto_compra,
                                 "StopLoss": stop_loss,
-                                "TakeProfit": target,
                                 "Cantidad": cantidad,
                                 "FechaEntrada": fecha_hoy
                             }
@@ -260,12 +254,12 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
         balances.append(acc)
     
     total_t = len(df_trades)
-    ganados = len(df_trades[df_trades['Resultado'] == "🎯 TAKE PROFIT"])
+    ganados = len(df_trades[df_trades['Rendimiento (%)'] > 0])
     winrate = (ganados / total_t) * 100 if total_t > 0 else 0
     ganancia_neta_ars = st.session_state.capital_final_total_global - capital_inicial
     rendimiento_pct = (ganancia_neta_ars / capital_inicial) * 100
     
-    st.success("✅ ¡Simulación de Breakout Institucional ejecutada con éxito!")
+    st.success("✅ ¡Simulación de Reversión a la Media ejecutada con éxito!")
     
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Operaciones Totales", total_t)
@@ -314,11 +308,10 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
                         x=df_rec.index, open=df_rec['Open'], high=df_rec['High'],
                         low=df_rec['Low'], close=df_rec['Close'], name=tick_aud
                     ))
+                    fig.add_trace(go.Scatter(x=df_rec.index, y=df_rec['EMA_9'], line=dict(color='blue', width=1.5), name="EMA 9"))
                     fig.add_trace(go.Scatter(x=df_rec.index, y=df_rec['EMA_200'], line=dict(color='orange', width=2), name="EMA 200"))
                     
                     fig.add_trace(go.Scatter(x=[f_c, f_v], y=[t_info["SL Inicial"], t_info["SL Inicial"]], line=dict(color='red', dash='dash'), name="Stop Loss"))
-                    if not pd.isna(t_info["TP Inicial"]):
-                        fig.add_trace(go.Scatter(x=[f_c, f_v], y=[t_info["TP Inicial"], t_info["TP Inicial"]], line=dict(color='green', dash='dash'), name="Take Profit"))
                     
                     fig.add_annotation(x=f_c, y=t_info["Precio Compra ($)"], text="📥 COMPRA", showarrow=True, arrowhead=2, arrowcolor="blue", bgcolor="blue", font=dict(color="white"))
                     fig.add_annotation(x=f_v, y=t_info["Precio Salida ($)"], text=f"📤 {t_info['Resultado']}", showarrow=True, arrowhead=2, arrowcolor="purple", bgcolor="purple", font=dict(color="white"))
@@ -326,4 +319,4 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
                     fig.update_layout(xaxis_rangeslider_visible=False, height=500, template="plotly_white")
                     st.plotly_chart(fig, use_container_width=True)
 elif "df_trades_global" in st.session_state:
-    st.info("No se registraron operaciones bajo este sistema de breakout en este período.")
+    st.info("No se registraron operaciones de reversión en este período.")
