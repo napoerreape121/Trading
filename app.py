@@ -9,42 +9,35 @@ import ta
 # 🛠️ CONFIGURACIÓN DE LA PÁGINA
 # =====================================================================
 st.set_page_config(
-    page_title="Simulador Cuantitativo: Multitrending Activo", 
-    page_icon="🚀", 
+    page_title="Simulador Cuantitativo: Wall Street Directo", 
+    page_icon="🇺🇸", 
     layout="wide"
 )
 
-st.title("🚀 Simulador Cuantitativo: Motor Multitrending de Alta Frecuencia")
-st.markdown("Estrategia rediseñada para asegurar rotación fluida, permitiendo múltiples entradas simultáneas y captura constante de alfa.")
+st.title("🇺🇸 Simulador Cuantitativo: Acciones de EE.UU. (Dólares)")
+st.markdown("Estrategia optimizada evaluada directamente sobre el mercado de origen, con comisiones internacionales mínimas.")
 
 # =====================================================================
-# 📋 UNIVERSO DE ACTIVOS (CEDEARs)
+# 📋 UNIVERSO DE ACTIVOS (ACCIONES DE EE.UU.)
 # =====================================================================
 tickers = [
-    'AAL.BA','ABT.BA','ACWI.BA','ADBE.BA','AMD.BA',
-    'AMZN.BA','AAPL.BA','ARM.BA','ARKK.BA','ASML.BA',
-    'AXP.BA','BAC.BA','BA.BA','BABA.BA','BKNG.BA',
-    'BP.BA','BRKB.BA','BX.BA','C.BA','CAT.BA',
-    'CCL.BA','COPX.BA','COIN.BA','COST.BA','CRM.BA',
-    'CVS.BA','CVX.BA','DAL.BA','DE.BA','DISN.BA',
-    'DIA.BA','EFA.BA','ETHA.BA','GE.BA','GOOGL.BA',
-    'GS.BA','HD.BA','HON.BA','IBM.BA','INTC.BA',
-    'JNJ.BA','JPM.BA','KO.BA','LLY.BA','MA.BA',
-    'MCD.BA','META.BA','MELI.BA','MMM.BA','MSFT.BA',
-    'NFLX.BA','NKE.BA','NVDA.BA','ORCL.BA','PANW.BA',
-    'PEP.BA','PFE.BA','PG.BA','PYPL.BA','QCOM.BA',
-    'QQQ.BA','ROKU.BA','SHOP.BA','SNOW.BA',
-    'SONY.BA','SPY.BA','T.BA','TEAM.BA',
-    'TGT.BA','TSLA.BA','TSM.BA','TXN.BA','UAL.BA',
-    'UBER.BA','UNH.BA','V.BA','VZ.BA','WFC.BA',
-    'WMT.BA','XOM.BA'
+    'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 
+    'META', 'TSLA', 'AMD', 'NFLX', 'INTC', 
+    'IBM', 'ORCL', 'CRM', 'QCOM', 'TXN', 
+    'AMAT', 'MU', 'LRCX', 'ADI', 'SHOP', 
+    'UBER', 'ABNB', 'MELI', 'PYPL', 'COIN', 
+    'JPM', 'BAC', 'WFC', 'C', 'GS', 
+    'MS', 'AXP', 'V', 'MA', 'DIS', 
+    'NKE', 'MCD', 'SBUX', 'WMT', 'COST', 
+    'KO', 'PEP', 'PG', 'JNJ', 'PFE', 
+    'UNH', 'CAT', 'DE', 'BA', 'HON'
 ]
 
 # =====================================================================
 # 🎛️ PANEL LATERAL (PARÁMETROS)
 # =====================================================================
-st.sidebar.header("💰 Parámetros Financieros")
-capital_inicial = st.sidebar.number_input("Capital Inicial ($ ARS)", min_value=100000, value=1000000, step=50000)
+st.sidebar.header("💰 Parámetros Financieros (USD)")
+capital_inicial = st.sidebar.number_input("Capital Inicial ($ USD)", min_value=1000, value=10000, step=500)
 
 st.sidebar.header("📅 Período de la Simulación")
 opcion_tiempo = st.sidebar.radio("Horizonte temporal a testear:", ("1 Año", "2 Años", "3 Años"), index=0)
@@ -59,19 +52,20 @@ else:
     periodo_download = "42mo"
     ruedas_recorte = 750
 
-COSTO_OPERATIVO = (0.0050 + 0.0005) * 1.21
-VOLUMEN_MINIMO = 2000 
+# Comisión baja típica de broker internacional (ej. Interactive Brokers aprox 0.05% por operación)
+COSTO_OPERATIVO = 0.0005 
+VOLUMEN_MINIMO = 500000 # Volumen mínimo diario en dólares/acciones operadas
 
 if "diccionario_precios_historicos" not in st.session_state:
     st.session_state.diccionario_precios_historicos = {}
 
 # =====================================================================
-# 🚀 MOTOR DE BACKTESTING MULTITRENDING
+# 🚀 MOTOR DE BACKTESTING WALL STREET
 # =====================================================================
-if st.button(f"🚀 Ejecutar Simulación Multitrending ({opcion_tiempo})"):
-    with st.spinner(f"Descargando datos y procesando matriz multiactivo..."):
+if st.button(f"🚀 Ejecutar Simulación en EE.UU. ({opcion_tiempo})"):
+    with st.spinner(f"Descargando datos oficiales de Wall Street..."):
         try:
-            full_tickers = tickers + ['SPY.BA']
+            full_tickers = tickers + ['SPY']
             datos_globales = yf.download(full_tickers, period=periodo_download, interval="1d", progress=False)
         except Exception as e:
             st.error(f"Error al descargar datos: {e}")
@@ -82,7 +76,7 @@ if st.button(f"🚀 Ejecutar Simulación Multitrending ({opcion_tiempo})"):
         
         try:
             spy_df = pd.DataFrame()
-            spy_df['Close'] = datos_globales['Close']['SPY.BA'].dropna()
+            spy_df['Close'] = datos_globales['Close']['SPY'].dropna()
             spy_df['SMA_50'] = spy_df['Close'].rolling(window=50).mean()
             spy_df = spy_df.dropna()
             spy_df.index = pd.to_datetime(spy_df.index).normalize()
@@ -161,7 +155,7 @@ if st.button(f"🚀 Ejecutar Simulación Multitrending ({opcion_tiempo})"):
                             precio_salida_neto = precio_salida_bruto * (1 - COSTO_OPERATIVO)
                             monto_recuperado = precio_salida_neto * pos["Cantidad"]
                             monto_invertido = pos["PrecioCompraNeto"] * pos["Cantidad"]
-                            ganancia_pesos = monto_recuperado - monto_invertido
+                            ganancia_dolares = monto_recuperado - monto_invertido
                             
                             capital_liberado_hoy += monto_recuperado
                             rend = ((precio_salida_neto - pos["PrecioCompraNeto"]) / pos["PrecioCompraNeto"]) * 100
@@ -169,11 +163,11 @@ if st.button(f"🚀 Ejecutar Simulación Multitrending ({opcion_tiempo})"):
                             historial_trades.append({
                                 "Fecha Compra": pos["FechaEntrada"],
                                 "Fecha Venta": fecha_manana,
-                                "CEDEAR": t_activo,
+                                "Acción": t_activo,
                                 "Resultado": resultado_str,
                                 "Rendimiento (%)": round(rend, 2),
-                                "Cantidad Nominales": pos["Cantidad"],
-                                "Ganancia Neta Trade ($)": ganancia_pesos,
+                                "Cantidad": pos["Cantidad"],
+                                "Ganancia Neta Trade ($ USD)": ganancia_dolares,
                                 "Precio Compra ($)": pos["PrecioCompraNeto"],
                                 "Precio Salida ($)": precio_salida_neto,
                                 "SL Inicial": pos["StopLoss"],
@@ -188,13 +182,13 @@ if st.button(f"🚀 Ejecutar Simulación Multitrending ({opcion_tiempo})"):
                 tickers_en_cartera = set(posiciones_activas.keys())
                 
                 # ==========================================
-                # 2. EVALUAR COMPRAS (Swing Trading Estándar Multiactivo)
+                # 2. EVALUAR COMPRAS
                 # ==========================================
                 for tick, df_activo in st.session_state.diccionario_precios_historicos.items():
                     if tick in tickers_en_cartera:
                         continue
                     
-                    if len(posiciones_activas) >= 6: # Máximo 6 posiciones simultáneas para diversificar bien
+                    if len(posiciones_activas) >= 5: 
                         break
                     
                     if fecha_hoy in df_activo.index:
@@ -207,15 +201,13 @@ if st.button(f"🚀 Ejecutar Simulación Multitrending ({opcion_tiempo})"):
                         vol_sma20 = float(row_hoy["Vol_SMA_20"])
                         atr = float(row_hoy["ATR_14"])
                         
-                        # Filtros estables: tendencia alcista con retroceso moderado del RSI
                         cond_tendencia = (p_close > sma_50)
-                        cond_retroceso = (rsi_14 < 48) and (rsi_14 > 30)
+                        cond_retroceso = (rsi_14 < 45) and (rsi_14 > 30)
                         cond_volumen = (vol_sma20 > VOLUMEN_MINIMO)
                         
                         if cond_tendencia and cond_retroceso and cond_volumen:
                             p_neto_compra = p_close * (1 + COSTO_OPERATIVO)
                             
-                            # Relación 1.5 ATR de riesgo vs 3.0 ATR de beneficio
                             stop_loss = p_neto_compra - (1.5 * atr) 
                             take_profit = p_neto_compra + (3.0 * atr)
                             
@@ -224,14 +216,14 @@ if st.button(f"🚀 Ejecutar Simulación Multitrending ({opcion_tiempo})"):
                                 continue
                             
                             capital_total_actual = efectivo + sum(p["PrecioCompraNeto"] * p["Cantidad"] for p in posiciones_activas.values())
-                            riesgo_max_ars = capital_total_actual * 0.025 # 2.5% de riesgo por operación
+                            riesgo_max_usd = capital_total_actual * 0.02 # 2% de riesgo por trade
                             
-                            cantidad = int(riesgo_max_ars // riesgo_por_accion)
+                            cantidad = int(riesgo_max_usd // riesgo_por_accion)
                             if cantidad <= 0:
                                 continue
                             
                             costo_total = p_neto_compra * cantidad
-                            if costo_total > efectivo or efectivo < (capital_inicial * 0.1):
+                            if costo_total > efectivo:
                                 continue
                             
                             efectivo -= costo_total
@@ -246,7 +238,7 @@ if st.button(f"🚀 Ejecutar Simulación Multitrending ({opcion_tiempo})"):
             capital_final = efectivo + sum(p["PrecioCompraNeto"] * p["Cantidad"] for p in posiciones_activas.values())
             
             if historial_trades:
-                st.session_state.df_trades_global = pd.DataFrame(historial_trades).sort_values(by=["Fecha Venta", "CEDEAR"]).reset_index(drop=True)
+                st.session_state.df_trades_global = pd.DataFrame(historial_trades).sort_values(by=["Fecha Venta", "Acción"]).reset_index(drop=True)
                 st.session_state.capital_final_total_global = capital_final
             else:
                 st.session_state.df_trades_global = None
@@ -260,14 +252,14 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
     balances = [capital_inicial]
     acc = capital_inicial
     for _, row in df_trades.iterrows():
-        acc += row["Ganancia Neta Trade ($)"]
+        acc += row["Ganancia Neta Trade ($ USD)"]
         balances.append(acc)
     
     total_t = len(df_trades)
     ganados = len(df_trades[df_trades['Resultado'].str.contains("TAKE PROFIT")])
     winrate = (ganados / total_t) * 100 if total_t > 0 else 0
-    ganancia_neta_ars = st.session_state.capital_final_total_global - capital_inicial
-    rendimiento_pct = (ganancia_neta_ars / capital_inicial) * 100
+    ganancia_neta_usd = st.session_state.capital_final_total_global - capital_inicial
+    rendimiento_pct = (ganancia_neta_usd / capital_inicial) * 100
     
     df_bal = pd.DataFrame({
         "Fecha": [df_trades.iloc[0]["Fecha Compra"]] + list(df_trades["Fecha Venta"]),
@@ -278,12 +270,12 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
     df_bal['Drawdown'] = (df_bal['Balance'] - df_bal['Max_Balance']) / df_bal['Max_Balance']
     max_dd = df_bal['Drawdown'].min() * 100
     
-    st.success("✅ ¡Simulación Multitrending ejecutada con éxito!")
+    st.success("✅ ¡Simulación en Wall Street ejecutada con éxito!")
     
     col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("Operaciones Totales", total_t)
     col2.metric("Efectividad (Win Rate)", f"{winrate:.1f}%")
-    col3.metric("Ganancia Neta ($)", f"$ {ganancia_neta_ars:,.2f}")
+    col3.metric("Ganancia Neta ($ USD)", f"$ {ganancia_neta_usd:,.2f}")
     col4.metric("Rendimiento Total", f"{rendimiento_pct:+.2f}%")
     col5.metric("Máxima Caída (Max DD)", f"{max_dd:.2f}%", delta_color="inverse")
     
@@ -295,13 +287,13 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
         df_view = df_trades.copy()
         df_view["Fecha Compra"] = df_view["Fecha Compra"].dt.strftime('%Y-%m-%d')
         df_view["Fecha Venta"] = df_view["Fecha Venta"].dt.strftime('%Y-%m-%d')
-        df_view["Ganancia Neta Trade ($)"] = df_view["Ganancia Neta Trade ($)"].apply(lambda x: f"$ {x:+,.2f}")
-        st.dataframe(df_view[["Fecha Compra", "Fecha Venta", "CEDEAR", "Resultado", "Rendimiento (%)", "Ganancia Neta Trade ($)"]], use_container_width=True)
+        df_view["Ganancia Neta Trade ($ USD)"] = df_view["Ganancia Neta Trade ($ USD)"].apply(lambda x: f"$ {x:+,.2f}")
+        st.dataframe(df_view[["Fecha Compra", "Fecha Venta", "Acción", "Resultado", "Rendimiento (%)", "Ganancia Neta Trade ($ USD)"]], use_container_width=True)
         
     with c_tab2:
         st.subheader("🔍 Inspector Visual de Trades")
         opciones = [
-            f"ID {i} | {row['Fecha Compra'].strftime('%Y-%m-%d')} | {row['CEDEAR']} -> {row['Resultado']}"
+            f"ID {i} | {row['Fecha Compra'].strftime('%Y-%m-%d')} | {row['Acción']} -> {row['Resultado']}"
             for i, row in df_trades.iterrows()
         ]
         elegido = st.selectbox("Seleccioná un trade para auditar:", opciones)
@@ -309,7 +301,7 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
         if elegido:
             idx_t = int(elegido.split("|")[0].replace("ID ", "").strip())
             t_info = df_trades.iloc[idx_t]
-            tick_aud = t_info["CEDEAR"]
+            tick_aud = t_info["Acción"]
             
             if tick_aud in st.session_state.diccionario_precios_historicos:
                 df_h = st.session_state.diccionario_precios_historicos[tick_aud]
@@ -335,4 +327,4 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
                     fig.update_layout(xaxis_rangeslider_visible=False, height=500, template="plotly_white")
                     st.plotly_chart(fig, use_container_width=True)
 elif "df_trades_global" in st.session_state:
-    st.info("No se registraron operaciones bajo los parámetros actuales.")
+    st.info("No se registraron operaciones bajo los parámetros actuales en EE.UU.")
