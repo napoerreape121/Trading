@@ -9,13 +9,13 @@ import ta
 # 🛠️ CONFIGURACIÓN DE LA PÁGINA
 # =====================================================================
 st.set_page_config(
-    page_title="Simulador Cuantitativo: Wall Street Directo", 
-    page_icon="🇺🇸", 
+    page_title="Simulador Cuantitativo: Wall Street (Small Cap/Low Capital)", 
+    page_icon="💵", 
     layout="wide"
 )
 
-st.title("🇺🇸 Simulador Cuantitativo: Acciones de EE.UU. (Dólares)")
-st.markdown("Estrategia optimizada evaluada directamente sobre el mercado de origen, con comisiones internacionales mínimas.")
+st.title("💵 Simulador Cuantitativo: Cuentas Pequeñas ($1k - $2k USD)")
+st.markdown("Estrategia adaptada para gestionar carteras de menor capital en acciones directas de EE.UU.")
 
 # =====================================================================
 # 📋 UNIVERSO DE ACTIVOS (ACCIONES DE EE.UU.)
@@ -37,7 +37,7 @@ tickers = [
 # 🎛️ PANEL LATERAL (PARÁMETROS)
 # =====================================================================
 st.sidebar.header("💰 Parámetros Financieros (USD)")
-capital_inicial = st.sidebar.number_input("Capital Inicial ($ USD)", min_value=1000, value=10000, step=500)
+capital_inicial = st.sidebar.number_input("Capital Inicial ($ USD)", min_value=500, max_value=10000, value=1000, step=100)
 
 st.sidebar.header("📅 Período de la Simulación")
 opcion_tiempo = st.sidebar.radio("Horizonte temporal a testear:", ("1 Año", "2 Años", "3 Años"), index=0)
@@ -52,17 +52,16 @@ else:
     periodo_download = "42mo"
     ruedas_recorte = 750
 
-# Comisión baja típica de broker internacional (ej. Interactive Brokers aprox 0.05% por operación)
 COSTO_OPERATIVO = 0.0005 
-VOLUMEN_MINIMO = 500000 # Volumen mínimo diario en dólares/acciones operadas
+VOLUMEN_MINIMO = 500000 
 
 if "diccionario_precios_historicos" not in st.session_state:
     st.session_state.diccionario_precios_historicos = {}
 
 # =====================================================================
-# 🚀 MOTOR DE BACKTESTING WALL STREET
+# 🚀 MOTOR DE BACKTESTING BAJO CAPITAL
 # =====================================================================
-if st.button(f"🚀 Ejecutar Simulación en EE.UU. ({opcion_tiempo})"):
+if st.button(f"🚀 Ejecutar Simulación ($ {capital_inicial} USD)"):
     with st.spinner(f"Descargando datos oficiales de Wall Street..."):
         try:
             full_tickers = tickers + ['SPY']
@@ -182,13 +181,13 @@ if st.button(f"🚀 Ejecutar Simulación en EE.UU. ({opcion_tiempo})"):
                 tickers_en_cartera = set(posiciones_activas.keys())
                 
                 # ==========================================
-                # 2. EVALUAR COMPRAS
+                # 2. EVALUAR COMPRAS (Ajustado a cuentas chicas)
                 # ==========================================
                 for tick, df_activo in st.session_state.diccionario_precios_historicos.items():
                     if tick in tickers_en_cartera:
                         continue
                     
-                    if len(posiciones_activas) >= 5: 
+                    if len(posiciones_activas) >= 3: # Máximo 3 posiciones para no sobre fragmentar un capital chico
                         break
                     
                     if fecha_hoy in df_activo.index:
@@ -216,14 +215,14 @@ if st.button(f"🚀 Ejecutar Simulación en EE.UU. ({opcion_tiempo})"):
                                 continue
                             
                             capital_total_actual = efectivo + sum(p["PrecioCompraNeto"] * p["Cantidad"] for p in posiciones_activas.values())
-                            riesgo_max_usd = capital_total_actual * 0.02 # 2% de riesgo por trade
+                            riesgo_max_usd = capital_total_actual * 0.03 # 3% de riesgo para cuentas chicas
                             
                             cantidad = int(riesgo_max_usd // riesgo_por_accion)
                             if cantidad <= 0:
-                                continue
+                                cantidad = 1 # Permitir al menos 1 acción si el capital da
                             
                             costo_total = p_neto_compra * cantidad
-                            if costo_total > efectivo:
+                            if costo_total > efectivo or costo_total > (capital_inicial * 0.5):
                                 continue
                             
                             efectivo -= costo_total
@@ -270,7 +269,7 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
     df_bal['Drawdown'] = (df_bal['Balance'] - df_bal['Max_Balance']) / df_bal['Max_Balance']
     max_dd = df_bal['Drawdown'].min() * 100
     
-    st.success("✅ ¡Simulación en Wall Street ejecutada con éxito!")
+    st.success("✅ ¡Simulación para cuenta pequeña ejecutada con éxito!")
     
     col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("Operaciones Totales", total_t)
@@ -327,4 +326,4 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
                     fig.update_layout(xaxis_rangeslider_visible=False, height=500, template="plotly_white")
                     st.plotly_chart(fig, use_container_width=True)
 elif "df_trades_global" in st.session_state:
-    st.info("No se registraron operaciones bajo los parámetros actuales en EE.UU.")
+    st.info("No se registraron operaciones con este capital bajo los parámetros actuales.")
