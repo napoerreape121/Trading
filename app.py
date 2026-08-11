@@ -9,35 +9,29 @@ import ta
 # 🛠️ CONFIGURACIÓN DE LA PÁGINA
 # =====================================================================
 st.set_page_config(
-    page_title="Simulador Cuantitativo: Wall Street (Small Cap/Low Capital)", 
-    page_icon="💵", 
+    page_title="Simulador Cuantitativo: Trend Following CEDEARs", 
+    page_icon="📈", 
     layout="wide"
 )
 
-st.title("💵 Simulador Cuantitativo: Cuentas Pequeñas ($1k - $2k USD)")
-st.markdown("Estrategia adaptada para gestionar carteras de menor capital en acciones directas de EE.UU.")
+st.title("📈 Simulador Cuantitativo: Tendencia de Largo Plazo (CEDEARs)")
+st.markdown("Estrategia optimizada para operar CEDEARs en pesos con baja rotación, minimizando comisiones y capturando grandes tendencias.")
 
 # =====================================================================
-# 📋 UNIVERSO DE ACTIVOS (ACCIONES DE EE.UU.)
+# 📋 UNIVERSO DE ACTIVOS (CEDEARs)
 # =====================================================================
 tickers = [
-    'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 
-    'META', 'TSLA', 'AMD', 'NFLX', 'INTC', 
-    'IBM', 'ORCL', 'CRM', 'QCOM', 'TXN', 
-    'AMAT', 'MU', 'LRCX', 'ADI', 'SHOP', 
-    'UBER', 'ABNB', 'MELI', 'PYPL', 'COIN', 
-    'JPM', 'BAC', 'WFC', 'C', 'GS', 
-    'MS', 'AXP', 'V', 'MA', 'DIS', 
-    'NKE', 'MCD', 'SBUX', 'WMT', 'COST', 
-    'KO', 'PEP', 'PG', 'JNJ', 'PFE', 
-    'UNH', 'CAT', 'DE', 'BA', 'HON'
+    'AAPL.BA','AMZN.BA','GOOGL.BA','META.BA','MSFT.BA',
+    'NVDA.BA','TSLA.BA','AMD.BA','MELI.BA','KO.BA',
+    'JNJ.BA','WMT.BA','PG.BA','XOM.BA','JPM.BA',
+    'V.BA','MA.BA','DISN.BA','NFLX.BA','INTC.BA'
 ]
 
 # =====================================================================
 # 🎛️ PANEL LATERAL (PARÁMETROS)
 # =====================================================================
-st.sidebar.header("💰 Parámetros Financieros (USD)")
-capital_inicial = st.sidebar.number_input("Capital Inicial ($ USD)", min_value=500, max_value=10000, value=1000, step=100)
+st.sidebar.header("💰 Parámetros Financieros")
+capital_inicial = st.sidebar.number_input("Capital Inicial ($ ARS)", min_value=100000, value=1000000, step=50000)
 
 st.sidebar.header("📅 Período de la Simulación")
 opcion_tiempo = st.sidebar.radio("Horizonte temporal a testear:", ("1 Año", "2 Años", "3 Años"), index=0)
@@ -52,19 +46,19 @@ else:
     periodo_download = "42mo"
     ruedas_recorte = 750
 
-COSTO_OPERATIVO = 0.0005 
-VOLUMEN_MINIMO = 500000 
+# Costo realista local operador argentino (ALyC + Aranceles + IVA) aprox 1.2% total por vuelta
+COSTO_OPERATIVO = 0.012 
 
 if "diccionario_precios_historicos" not in st.session_state:
     st.session_state.diccionario_precios_historicos = {}
 
 # =====================================================================
-# 🚀 MOTOR DE BACKTESTING BAJO CAPITAL
+# 🚀 MOTOR DE BACKTESTING TREND FOLLOWING
 # =====================================================================
-if st.button(f"🚀 Ejecutar Simulación ($ {capital_inicial} USD)"):
-    with st.spinner(f"Descargando datos oficiales de Wall Street..."):
+if st.button(f"🚀 Ejecutar Simulación de Tendencia ({opcion_tiempo})"):
+    with st.spinner(f"Descargando datos y procesando tendencias de CEDEARs..."):
         try:
-            full_tickers = tickers + ['SPY']
+            full_tickers = tickers + ['SPY.BA']
             datos_globales = yf.download(full_tickers, period=periodo_download, interval="1d", progress=False)
         except Exception as e:
             st.error(f"Error al descargar datos: {e}")
@@ -75,8 +69,8 @@ if st.button(f"🚀 Ejecutar Simulación ($ {capital_inicial} USD)"):
         
         try:
             spy_df = pd.DataFrame()
-            spy_df['Close'] = datos_globales['Close']['SPY'].dropna()
-            spy_df['SMA_50'] = spy_df['Close'].rolling(window=50).mean()
+            spy_df['Close'] = datos_globales['Close']['SPY.BA'].dropna()
+            spy_df['SMA_200'] = spy_df['Close'].rolling(window=200).mean()
             spy_df = spy_df.dropna()
             spy_df.index = pd.to_datetime(spy_df.index).normalize()
         except Exception:
@@ -93,13 +87,12 @@ if st.button(f"🚀 Ejecutar Simulación ($ {capital_inicial} USD)"):
                 df['High'] = datos_globales['High'][ticker].dropna()
                 df['Volume'] = datos_globales['Volume'][ticker].dropna()
                 
-                if len(df) < 50:
+                if len(df) < 200:
                     continue
                 
+                df['SMA_200'] = df['Close'].rolling(window=200).mean()
                 df['SMA_50'] = df['Close'].rolling(window=50).mean()
-                df['RSI_14'] = ta.momentum.rsi(df['Close'], window=14)
                 df['ATR_14'] = ta.volatility.average_true_range(df['High'], df['Low'], df['Close'], window=14)
-                df['Vol_SMA_20'] = df['Volume'].rolling(window=20).mean()
                 
                 df = df.dropna()
                 df.index = pd.to_datetime(df.index).normalize()
@@ -122,57 +115,53 @@ if st.button(f"🚀 Ejecutar Simulación ($ {capital_inicial} USD)"):
                 fecha_hoy = fechas_unicas[f]
                 fecha_manana = fechas_unicas[f+1]
                 
+                # Filtro macro: ¿El mercado general (SPY en pesos) está alcista?
+                mercado_alcista = True
+                if not spy_df.empty and fecha_hoy in spy_df.index:
+                    if spy_df.loc[fecha_hoy, 'Close'] < spy_df.loc[fecha_hoy, 'SMA_200']:
+                        mercado_alcista = False
+                
                 capital_liberado_hoy = 0
                 tickers_a_cerrar = []
                 
                 # ==========================================
-                # 1. EVALUAR VENTAS
+                # 1. EVALUAR SALIDAS (Trend Following por pérdida de SMA 50 o Mercado Bajista)
                 # ==========================================
                 for t_activo, pos in list(posiciones_activas.items()):
                     df_activo = st.session_state.diccionario_precios_historicos[t_activo]
                     
-                    if fecha_manana in df_activo.index:
-                        row_m = df_activo.loc[fecha_manana]
-                        p_open = float(row_m["Open"])
-                        p_low = float(row_m["Low"])
-                        p_high = float(row_m["High"])
+                    if fecha_hoy in df_activo.index:
+                        row_h = df_activo.loc[fecha_hoy]
+                        p_close = float(row_h["Close"])
+                        sma_50 = float(row_h["SMA_50"])
                         
-                        cerrar = False
-                        resultado_str = ""
-                        precio_salida_bruto = 0
-                        
-                        if p_low <= pos["StopLoss"]:
-                            cerrar = True
-                            precio_salida_bruto = min(pos["StopLoss"], p_open)
-                            resultado_str = "🔴 STOP LOSS"
-                        elif p_high >= pos["TakeProfit"]: 
-                            cerrar = True
-                            precio_salida_bruto = max(pos["TakeProfit"], p_open)
-                            resultado_str = "🎯 TAKE PROFIT"
-                        
-                        if cerrar:
-                            precio_salida_neto = precio_salida_bruto * (1 - COSTO_OPERATIVO)
-                            monto_recuperado = precio_salida_neto * pos["Cantidad"]
-                            monto_invertido = pos["PrecioCompraNeto"] * pos["Cantidad"]
-                            ganancia_dolares = monto_recuperado - monto_invertido
-                            
-                            capital_liberado_hoy += monto_recuperado
-                            rend = ((precio_salida_neto - pos["PrecioCompraNeto"]) / pos["PrecioCompraNeto"]) * 100
-                            
-                            historial_trades.append({
-                                "Fecha Compra": pos["FechaEntrada"],
-                                "Fecha Venta": fecha_manana,
-                                "Acción": t_activo,
-                                "Resultado": resultado_str,
-                                "Rendimiento (%)": round(rend, 2),
-                                "Cantidad": pos["Cantidad"],
-                                "Ganancia Neta Trade ($ USD)": ganancia_dolares,
-                                "Precio Compra ($)": pos["PrecioCompraNeto"],
-                                "Precio Salida ($)": precio_salida_neto,
-                                "SL Inicial": pos["StopLoss"],
-                                "TP Inicial": pos["TakeProfit"]
-                            })
-                            tickers_a_cerrar.append(t_activo)
+                        # Sale si rompe la media de 50 hacia abajo o el mercado general se pone bajista
+                        if (p_close < sma_50) or (not mercado_alcista):
+                            if fecha_manana in df_activo.index:
+                                p_open_m = float(df_activo.loc[fecha_manana, "Open"])
+                                precio_salida_neto = p_open_m * (1 - COSTO_OPERATIVO)
+                                
+                                monto_recuperado = precio_salida_neto * pos["Cantidad"]
+                                monto_invertido = pos["PrecioCompraNeto"] * pos["Cantidad"]
+                                ganancia_pesos = monto_recuperado - monto_invertido
+                                
+                                capital_liberado_hoy += monto_recuperado
+                                rend = ((precio_salida_neto - pos["PrecioCompraNeto"]) / pos["PrecioCompraNeto"]) * 100
+                                
+                                historial_trades.append({
+                                    "Fecha Compra": pos["FechaEntrada"],
+                                    "Fecha Venta": fecha_manana,
+                                    "CEDEAR": t_activo,
+                                    "Resultado": "📈 SALIDA TENDENCIA",
+                                    "Rendimiento (%)": round(rend, 2),
+                                    "Cantidad Nominales": pos["Cantidad"],
+                                    "Ganancia Neta Trade ($)": ganancia_pesos,
+                                    "Precio Compra ($)": pos["PrecioCompraNeto"],
+                                    "Precio Salida ($)": precio_salida_neto,
+                                    "SL Inicial": pos["PrecioCompraNeto"] * 0.85, # Stop técnico amplio
+                                    "TP Inicial": pos["PrecioCompraNeto"] * 1.50
+                                })
+                                tickers_a_cerrar.append(t_activo)
                 
                 for t in tickers_a_cerrar:
                     posiciones_activas.pop(t)
@@ -181,69 +170,54 @@ if st.button(f"🚀 Ejecutar Simulación ($ {capital_inicial} USD)"):
                 tickers_en_cartera = set(posiciones_activas.keys())
                 
                 # ==========================================
-                # 2. EVALUAR COMPRAS (Ajustado a cuentas chicas)
+                # 2. EVALUAR ENTRADAS (Solo si el mercado está alcista)
                 # ==========================================
-                for tick, df_activo in st.session_state.diccionario_precios_historicos.items():
-                    if tick in tickers_en_cartera:
-                        continue
-                    
-                    if len(posiciones_activas) >= 3: # Máximo 3 posiciones para no sobre fragmentar un capital chico
-                        break
-                    
-                    if fecha_hoy in df_activo.index:
-                        row_hoy = df_activo.loc[fecha_hoy]
+                if mercado_alcista:
+                    for tick, df_activo in st.session_state.diccionario_precios_historicos.items():
+                        if tick in tickers_en_cartera:
+                            continue
                         
-                        p_close = float(row_hoy["Close"])
-                        sma_50 = float(row_hoy["SMA_50"])
-                        rsi_14 = float(row_hoy["RSI_14"])
-                        vol = float(row_hoy["Volume"])
-                        vol_sma20 = float(row_hoy["Vol_SMA_20"])
-                        atr = float(row_hoy["ATR_14"])
+                        if len(posiciones_activas) >= 4: # Máximo 4 CEDEARs en cartera
+                            break
                         
-                        cond_tendencia = (p_close > sma_50)
-                        cond_retroceso = (rsi_14 < 45) and (rsi_14 > 30)
-                        cond_volumen = (vol_sma20 > VOLUMEN_MINIMO)
-                        
-                        if cond_tendencia and cond_retroceso and cond_volumen:
-                            p_neto_compra = p_close * (1 + COSTO_OPERATIVO)
+                        if fecha_hoy in df_activo.index:
+                            row_hoy = df_activo.loc[fecha_hoy]
+                            p_close = float(row_hoy["Close"])
+                            sma_200 = float(row_hoy["SMA_200"])
+                            sma_50 = float(row_hoy["SMA_50"])
                             
-                            stop_loss = p_neto_compra - (1.5 * atr) 
-                            take_profit = p_neto_compra + (3.0 * atr)
-                            
-                            riesgo_por_accion = p_neto_compra - stop_loss
-                            if stop_loss <= 0 or riesgo_por_accion <= 0:
-                                continue
-                            
-                            capital_total_actual = efectivo + sum(p["PrecioCompraNeto"] * p["Cantidad"] for p in posiciones_activas.values())
-                            riesgo_max_usd = capital_total_actual * 0.03 # 3% de riesgo para cuentas chicas
-                            
-                            cantidad = int(riesgo_max_usd // riesgo_por_accion)
-                            if cantidad <= 0:
-                                cantidad = 1 # Permitir al menos 1 acción si el capital da
-                            
-                            costo_total = p_neto_compra * cantidad
-                            if costo_total > efectivo or costo_total > (capital_inicial * 0.5):
-                                continue
-                            
-                            efectivo -= costo_total
-                            posiciones_activas[tick] = {
-                                "PrecioCompraNeto": p_neto_compra,
-                                "StopLoss": stop_loss,
-                                "TakeProfit": take_profit,
-                                "Cantidad": cantidad,
-                                "FechaEntrada": fecha_hoy
-                            }
+                            # Condición de compra: Precio arriba de SMA 200 y SMA 50 (Fuerza alcista clara)
+                            if (p_close > sma_200) and (p_close > sma_50):
+                                if fecha_manana in df_activo.index:
+                                    p_open_m = float(df_activo.loc[fecha_manana, "Open"])
+                                    p_neto_compra = p_open_m * (1 + COSTO_OPERATIVO)
+                                    
+                                    capital_total_actual = efectivo + sum(p["PrecioCompraNeto"] * p["Cantidad"] for p in posiciones_activas.values())
+                                    monto_por_cedear = capital_total_actual / 4 # Dividir en 4 partes iguales
+                                    
+                                    cantidad = int(monto_por_cedear // p_neto_compra)
+                                    if cantidad <= 0 or (p_neto_compra * cantidad) > efectivo:
+                                        continue
+                                    
+                                    costo_total = p_neto_compra * cantidad
+                                    efectivo -= costo_total
+                                    
+                                    posiciones_activas[tick] = {
+                                        "PrecioCompraNeto": p_neto_compra,
+                                        "Cantidad": cantidad,
+                                        "FechaEntrada": fecha_manana
+                                    }
             
             capital_final = efectivo + sum(p["PrecioCompraNeto"] * p["Cantidad"] for p in posiciones_activas.values())
             
             if historial_trades:
-                st.session_state.df_trades_global = pd.DataFrame(historial_trades).sort_values(by=["Fecha Venta", "Acción"]).reset_index(drop=True)
+                st.session_state.df_trades_global = pd.DataFrame(historial_trades).sort_values(by=["Fecha Venta", "CEDEAR"]).reset_index(drop=True)
                 st.session_state.capital_final_total_global = capital_final
             else:
                 st.session_state.df_trades_global = None
 
 # =====================================================================
-# 📊 VISUALIZACIÓN DE RESULTADOS E INSPECTOR VISUAL
+# 📊 VISUALIZACIÓN DE RESULTADOS
 # =====================================================================
 if "df_trades_global" in st.session_state and st.session_state.df_trades_global is not None:
     df_trades = st.session_state.df_trades_global.copy()
@@ -251,14 +225,14 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
     balances = [capital_inicial]
     acc = capital_inicial
     for _, row in df_trades.iterrows():
-        acc += row["Ganancia Neta Trade ($ USD)"]
+        acc += row["Ganancia Neta Trade ($)"]
         balances.append(acc)
     
     total_t = len(df_trades)
-    ganados = len(df_trades[df_trades['Resultado'].str.contains("TAKE PROFIT")])
+    ganados = len(df_trades[df_trades['Rendimiento (%)'] > 0])
     winrate = (ganados / total_t) * 100 if total_t > 0 else 0
-    ganancia_neta_usd = st.session_state.capital_final_total_global - capital_inicial
-    rendimiento_pct = (ganancia_neta_usd / capital_inicial) * 100
+    ganancia_neta_ars = st.session_state.capital_final_total_global - capital_inicial
+    rendimiento_pct = (ganancia_neta_ars / capital_inicial) * 100
     
     df_bal = pd.DataFrame({
         "Fecha": [df_trades.iloc[0]["Fecha Compra"]] + list(df_trades["Fecha Venta"]),
@@ -269,61 +243,22 @@ if "df_trades_global" in st.session_state and st.session_state.df_trades_global 
     df_bal['Drawdown'] = (df_bal['Balance'] - df_bal['Max_Balance']) / df_bal['Max_Balance']
     max_dd = df_bal['Drawdown'].min() * 100
     
-    st.success("✅ ¡Simulación para cuenta pequeña ejecutada con éxito!")
+    st.success("✅ ¡Simulación de Tendencia ejecutada con éxito!")
     
     col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("Operaciones Totales", total_t)
     col2.metric("Efectividad (Win Rate)", f"{winrate:.1f}%")
-    col3.metric("Ganancia Neta ($ USD)", f"$ {ganancia_neta_usd:,.2f}")
+    col3.metric("Ganancia Neta ($)", f"$ {ganancia_neta_ars:,.2f}")
     col4.metric("Rendimiento Total", f"{rendimiento_pct:+.2f}%")
     col5.metric("Máxima Caída (Max DD)", f"{max_dd:.2f}%", delta_color="inverse")
     
     st.line_chart(df_bal["Balance"], use_container_width=True)
     
-    c_tab1, c_tab2 = st.columns(2)
-    with c_tab1:
-        st.subheader("📋 Historial de Operaciones")
-        df_view = df_trades.copy()
-        df_view["Fecha Compra"] = df_view["Fecha Compra"].dt.strftime('%Y-%m-%d')
-        df_view["Fecha Venta"] = df_view["Fecha Venta"].dt.strftime('%Y-%m-%d')
-        df_view["Ganancia Neta Trade ($ USD)"] = df_view["Ganancia Neta Trade ($ USD)"].apply(lambda x: f"$ {x:+,.2f}")
-        st.dataframe(df_view[["Fecha Compra", "Fecha Venta", "Acción", "Resultado", "Rendimiento (%)", "Ganancia Neta Trade ($ USD)"]], use_container_width=True)
-        
-    with c_tab2:
-        st.subheader("🔍 Inspector Visual de Trades")
-        opciones = [
-            f"ID {i} | {row['Fecha Compra'].strftime('%Y-%m-%d')} | {row['Acción']} -> {row['Resultado']}"
-            for i, row in df_trades.iterrows()
-        ]
-        elegido = st.selectbox("Seleccioná un trade para auditar:", opciones)
-        
-        if elegido:
-            idx_t = int(elegido.split("|")[0].replace("ID ", "").strip())
-            t_info = df_trades.iloc[idx_t]
-            tick_aud = t_info["Acción"]
-            
-            if tick_aud in st.session_state.diccionario_precios_historicos:
-                df_h = st.session_state.diccionario_precios_historicos[tick_aud]
-                f_c = t_info["Fecha Compra"]
-                f_v = t_info["Fecha Venta"]
-                
-                df_rec = df_h[(df_h.index >= f_c - pd.Timedelta(days=15)) & (df_h.index <= f_v + pd.Timedelta(days=15))]
-                
-                if not df_rec.empty:
-                    fig = go.Figure()
-                    fig.add_trace(go.Candlestick(
-                        x=df_rec.index, open=df_rec['Open'], high=df_rec['High'],
-                        low=df_rec['Low'], close=df_rec['Close'], name=tick_aud
-                    ))
-                    fig.add_trace(go.Scatter(x=df_rec.index, y=df_rec['SMA_50'], line=dict(color='orange', width=2), name="SMA 50"))
-                    
-                    fig.add_trace(go.Scatter(x=[f_c, f_v], y=[t_info["SL Inicial"], t_info["SL Inicial"]], line=dict(color='red', dash='dash'), name="Stop Loss"))
-                    fig.add_trace(go.Scatter(x=[f_c, f_v], y=[t_info["TP Inicial"], t_info["TP Inicial"]], line=dict(color='green', dash='dash'), name="Take Profit"))
-                    
-                    fig.add_annotation(x=f_c, y=t_info["Precio Compra ($)"], text="📥 COMPRA", showarrow=True, arrowhead=2, arrowcolor="blue", bgcolor="blue", font=dict(color="white"))
-                    fig.add_annotation(x=f_v, y=t_info["Precio Salida ($)"], text=f"📤 {t_info['Resultado']}", showarrow=True, arrowhead=2, arrowcolor="purple", bgcolor="purple", font=dict(color="white"))
-                    
-                    fig.update_layout(xaxis_rangeslider_visible=False, height=500, template="plotly_white")
-                    st.plotly_chart(fig, use_container_width=True)
+    st.subheader("📋 Historial de Operaciones de Tendencia")
+    df_view = df_trades.copy()
+    df_view["Fecha Compra"] = df_view["Fecha Compra"].dt.strftime('%Y-%m-%d')
+    df_view["Fecha Venta"] = df_view["Fecha Venta"].dt.strftime('%Y-%m-%d')
+    df_view["Ganancia Neta Trade ($)"] = df_view["Ganancia Neta Trade ($)"].apply(lambda x: f"$ {x:+,.2f}")
+    st.dataframe(df_view[["Fecha Compra", "Fecha Venta", "CEDEAR", "Resultado", "Rendimiento (%)", "Ganancia Neta Trade ($)"]], use_container_width=True)
 elif "df_trades_global" in st.session_state:
-    st.info("No se registraron operaciones con este capital bajo los parámetros actuales.")
+    st.info("No se registraron operaciones bajo las condiciones de tendencia actuales.")
